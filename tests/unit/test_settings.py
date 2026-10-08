@@ -12,6 +12,12 @@ PROD_ENV = {
     "GOOGLE_CLIENT_ID": "client-id",
     "GOOGLE_CLIENT_SECRET": "client-secret",
     "PRIVACY_CONTACT_EMAIL": "privacidade@example.com",
+    "AI_LLM": "gemini",
+    "AI_EMBEDDER": "gemini",
+    "AI_STT": "google",
+    "AI_TTS": "google",
+    "GEMINI_API_KEY": "gemini-key",
+    "GOOGLE_CLOUD_PROJECT": "mentor-prod",
 }
 
 
@@ -43,14 +49,32 @@ def test_defaults_to_prod_and_hides_secrets_from_repr(monkeypatch: pytest.Monkey
     assert "hunter2" not in repr(settings)
     assert VALID_KEY not in repr(settings)
     assert "client-secret" not in repr(settings)
+    assert "gemini-key" not in repr(settings)
 
 
-def test_prod_requires_google_login_and_privacy_contact(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("APP_ENV", "prod")
-    for var in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "PRIVACY_CONTACT_EMAIL"):
-        monkeypatch.delenv(var, raising=False)
+def test_prod_requires_login_contact_and_ai_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var, value in PROD_ENV.items():
+        monkeypatch.setenv(var, value)
+    for var in (
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "PRIVACY_CONTACT_EMAIL",
+        "GEMINI_API_KEY",
+        "GOOGLE_CLOUD_PROJECT",
+    ):
+        monkeypatch.delenv(var)
 
-    with pytest.raises(ValidationError, match=r"GOOGLE_CLIENT_ID.*PRIVACY_CONTACT_EMAIL"):
+    pattern = r"GOOGLE_CLIENT_ID.*PRIVACY_CONTACT_EMAIL, GEMINI_API_KEY, GOOGLE_CLOUD_PROJECT"
+    with pytest.raises(ValidationError, match=pattern):
+        Settings(_env_file=None, database_url=DB, secret_key=VALID_KEY)  # type: ignore[call-arg]
+
+
+def test_prod_refuses_fake_ai_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var, value in PROD_ENV.items():
+        monkeypatch.setenv(var, value)
+    monkeypatch.setenv("AI_TTS", "fake")
+
+    with pytest.raises(ValidationError, match="fake AI adapters"):
         Settings(_env_file=None, database_url=DB, secret_key=VALID_KEY)  # type: ignore[call-arg]
 
 
