@@ -1,0 +1,26 @@
+{% macro progress_ring(percent, label) %}
+{% set r = 26 %}{% set c = 2 * 3.14159 * r %}
+<svg width="72" height="72" viewBox="0 0 64 64" role="img" aria-label="{{ label }}">
+  <circle cx="32" cy="32" r="{{ r }}" fill="none" stroke="currentColor" stroke-opacity=".2" stroke-width="6"/>
+  <circle cx="32" cy="32" r="{{ r }}" fill="none" stroke="#92b4a7" stroke-width="6" stroke-linecap="round"
+          stroke-dasharray="{{ c }}" stroke-dashoffset="{{ c * (1 - percent / 100) }}" transform="rotate(-90 32 32)"/>
+  <text x="32" y="36" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">{{ percent }}%</text>
+</svg>
+{% endmacro %}
+
+{% macro hero_card() %}
+<section class="rounded-[var(--radius-card)] bg-ink p-6 text-cream shadow-lg">
+  {{ caller() }}
+</section>
+{% endmacro %}
+
+{% macro tint_card(href="#", tone="cream") %}
+<a href="{{ href }}" class="block rounded-[var(--radius-card)] p-5 shadow-sm transition active:scale-[.98]
+   {{ 'bg-cream' if tone == 'cream' else 'bg-surface ring-1 ring-moss/50' if tone == 'plain' else 'bg-ink text-cream' }}">
+  {{ caller() }}
+</a>
+{% endmacro %}
+
+{% macro primary_button(label, href="#") %}
+<a href="{{ href }}" class="inline-flex items-center justify-center rounded-full bg-sage px-6 py-3 text-sm font-semibold text-ink shadow transition active:scale-95">{{ label }}</a>
+{% endmacro %}

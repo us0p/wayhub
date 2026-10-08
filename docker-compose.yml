@@ -1,0 +1,38 @@
+# Local development only. Credentials come from `.env` (git-ignored); copy `.env.example`
+# and fill it in. Published ports are bound to 127.0.0.1 so the database and app are never
+# reachable from the network (Docker-published ports bypass host firewalls like ufw).
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\""]
+      interval: 3s
+      retries: 20
+
+  app:
+    build: { context: ., target: dev }
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    command: sh -c "alembic upgrade head && uvicorn mentor.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir src"
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./tests:/app/tests
+    depends_on:
+      db: { condition: service_healthy }
+
+  tailwind:
+    build: { context: ., target: css }
+    command: tailwindcss -i src/mentor/web/static/css/input.css -o src/mentor/web/static/css/app.css --watch=always
+    volumes: [./src/mentor/web:/build/src/mentor/web]
+
+volumes:
+  pgdata:

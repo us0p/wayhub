@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f2f2f">
+  <title>{% block title %}Mentor{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  {# htmx config: no inline <style> injection, so the CSP needs no 'unsafe-inline' for styles #}
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"
+          integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
+          crossorigin="anonymous" defer></script>
+</head>
+<body>
+  {% from "components/nav.html" import bottom_nav, top_nav %}
+  {# Mobile-first (D38): phone layout by default, widened at md+ with the dock moved to the top. #}
+  {% block top_nav %}{{ top_nav(active_nav|default("")) }}{% endblock %}
+  <div class="min-h-dvh bg-surface md:bg-canvas">
+    <main class="mx-auto w-full max-w-md px-5 pb-28 pt-8 md:max-w-6xl md:px-8 md:pb-16 md:pt-10">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% block bottom_nav %}{{ bottom_nav(active_nav|default("")) }}{% endblock %}
+</body>
+</html>

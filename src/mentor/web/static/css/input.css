@@ -1,0 +1,27 @@
+/* Tailwind v4 entry (D25). Palette tokens from D4, AA-safe shades from D33. */
+@import "tailwindcss";
+@source "../../templates";
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand palette — https://coolors.co/93827f-f3f9d2-bdc4a7-2f2f2f-92b4a7 */
+  --color-ink: #2f2f2f;          /* dark hero cards, nav, body text */
+  --color-sage: #92b4a7;         /* primary CTA background (text must be ink) */
+  --color-cream: #f3f9d2;        /* tinted cards */
+  --color-moss: #bdc4a7;         /* borders, chips */
+  --color-taupe: #93827f;        /* decorative only — fails AA as text */
+
+  /* AA-safe derived shades (D33) */
+  --color-taupe-strong: #6b5d5a; /* muted text: 6.3:1 on white, 5.8:1 on cream */
+  --color-sage-strong: #4e6e62;  /* sage as text/icon on light backgrounds */
+  --color-surface: #ffffff;
+  --color-canvas: #eef1ea;       /* page background behind cards */
+
+  --radius-card: 1.75rem;
+}
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body { @apply bg-canvas text-ink font-sans antialiased; }
+}
