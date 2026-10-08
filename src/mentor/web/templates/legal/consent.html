@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Antes de começar") }} · Mentor{% endblock %}
+{% block top_nav %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <h1 class="text-2xl font-semibold md:text-3xl">{{ _("Antes de começar") }}</h1>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Em resumo, como o Mentor cuida dos seus dados:") }}</p>
+
+  <ul class="mt-6 space-y-3 text-sm">
+    {% for item in [
+      _("Você conta sua trajetória; a gente monta seu perfil e currículos para as vagas que você escolher."),
+      _("Suas mensagens, sua voz em tempo real e as vagas são processadas por serviços de IA do Google para gerar as respostas."),
+      _("Não gravamos áudio: guardamos só a transcrição em texto."),
+      _("Nunca inventamos experiências nem habilidades que você não declarou."),
+      _("Você pode corrigir seus dados e excluir sua conta a qualquer momento."),
+    ] %}
+    <li class="flex gap-3 rounded-2xl bg-cream px-4 py-3"><span aria-hidden="true" class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-sage-strong"></span>{{ item }}</li>
+    {% endfor %}
+  </ul>
+
+  <form hx-post="/consentimento" class="mt-8">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="flex items-start gap-3 text-sm">
+      <input type="checkbox" name="aceito" value="sim" required class="mt-0.5 h-5 w-5 shrink-0 accent-sage-strong">
+      <span>{{ _("Li e aceito os") }} <a href="/termos" target="_blank" class="underline">{{ _("Termos de Uso") }}</a>
+        ({{ terms_version }}) {{ _("e a") }} <a href="/privacidade" target="_blank" class="underline">{{ _("Política de Privacidade") }}</a> ({{ privacy_version }}).</span>
+    </label>
+    {% if error %}<p role="alert" class="mt-3 text-sm font-medium text-danger">{{ _("Para continuar, marque a caixa de aceite.") }}</p>{% endif %}
+    <div class="mt-6 flex flex-col gap-3 md:flex-row md:items-center">
+      <button class="rounded-full bg-sage px-6 py-3.5 text-sm font-semibold text-ink shadow md:px-8">{{ _("Aceitar e continuar") }}</button>
+      <button type="button" hx-post="/sair" class="rounded-full px-6 py-3 text-sm font-medium text-taupe-strong">{{ _("Agora não, sair") }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

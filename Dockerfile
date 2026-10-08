@@ -30,7 +30,7 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 RUN useradd --create-home --uid 1000 mentor
 USER mentor
 EXPOSE 8000
-CMD ["uvicorn", "mentor.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["uvicorn", "--factory", "mentor.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
 
 # --- Dev image: includes dev dependencies ---
 FROM app AS dev

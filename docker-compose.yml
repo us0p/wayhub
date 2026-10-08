@@ -20,7 +20,7 @@ services:
     env_file: [.env]
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-    command: sh -c "alembic upgrade head && uvicorn mentor.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir src"
+    command: sh -c "alembic upgrade head && uvicorn --factory mentor.main:create_app --host 0.0.0.0 --port 8000 --reload --reload-dir src"
     ports: ["127.0.0.1:8000:8000"]
     volumes:
       - ./src:/app/src

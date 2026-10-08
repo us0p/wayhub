@@ -16,6 +16,12 @@ class Base(DeclarativeBase):
     pass
 
 
+def import_models() -> None:
+    """Import every model module so `Base.metadata` is complete (Alembic, tests)."""
+    import mentor.auth.models
+    import mentor.quotas.models  # noqa: F401
+
+
 @lru_cache
 def get_engine() -> AsyncEngine:
     return create_async_engine(get_settings().database_dsn, pool_pre_ping=True)

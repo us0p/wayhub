@@ -5,13 +5,14 @@ from alembic import context
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from mentor.db import Base
+from mentor.db import Base, import_models
 from mentor.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+import_models()
 target_metadata = Base.metadata
 
 

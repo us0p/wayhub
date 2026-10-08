@@ -3,6 +3,7 @@
 {% block content %}
 <header class="mb-6 md:mb-8">
   <h1 class="text-2xl font-semibold leading-snug md:text-4xl">
+    <span class="block text-base font-medium text-taupe-strong md:text-lg">{{ _("Olá, %(name)s", name=user.name.split(" ")[0]) }}</span>
     {{ _("Vamos montar seu") }}<br class="md:hidden"> <span class="text-sage-strong">{{ _("próximo passo") }}</span>
   </h1>
 </header>
