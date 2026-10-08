@@ -1,0 +1,30 @@
+{% macro quota_label(kind) %}{{ {
+  "interview_turn": _("Mensagens na entrevista"),
+  "job_import": _("Vagas importadas"),
+  "cv_generation": _("Currículos gerados"),
+  "voice_seconds": _("Minutos de entrevista por voz"),
+}[kind.value] }}{% endmacro %}
+
+{# Voice is stored in seconds but shown in whole minutes. #}
+{% macro quota_amount(kind, value) %}{% if kind.value == "voice_seconds" %}{{ (value / 60) | round(0, "ceil") | int }}{% else %}{{ value }}{% endif %}{% endmacro %}
+
+{% macro quota_meter(status) %}
+<div class="rounded-2xl bg-cream p-4">
+  <div class="flex items-baseline justify-between gap-3">
+    <p class="text-sm font-medium">{{ quota_label(status.kind) }}</p>
+    <p class="text-xs text-taupe-strong">
+      {% if status.limit is none %}{{ _("Ilimitado") }}
+      {% else %}{{ quota_amount(status.kind, status.used) }} / {{ quota_amount(status.kind, status.limit) }}{% endif %}
+    </p>
+  </div>
+  {% if status.limit is not none %}
+  {% set pct = [100, (status.used * 100 / status.limit) if status.limit else 100] | min %}
+  {# Native <progress>: no inline style needed, so the strict CSP holds (D37). #}
+  <progress max="100" value="{{ pct | int }}" aria-label="{{ quota_label(status.kind) }}"
+    class="mt-2 block h-2 w-full appearance-none overflow-hidden rounded-full bg-moss/40
+           [&::-webkit-progress-bar]:bg-moss/40 [&::-webkit-progress-value]:rounded-full
+           {{ '[&::-webkit-progress-value]:bg-danger [&::-moz-progress-bar]:bg-danger' if pct >= 100 else '[&::-webkit-progress-value]:bg-sage-strong [&::-moz-progress-bar]:bg-sage-strong' }}"></progress>
+  <p class="mt-1 text-xs text-taupe-strong">{{ _("Renova todo dia à meia-noite") if status.resets_at else _("Total da conta") }}</p>
+  {% endif %}
+</div>
+{% endmacro %}

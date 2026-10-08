@@ -1,0 +1,8 @@
+{% from "components/quota.html" import quota_label %}
+<div role="alert" class="rounded-2xl bg-cream p-4 text-sm">
+  <p class="font-semibold">{{ _("Limite atingido") }}: {{ quota_label(status.kind) }}</p>
+  <p class="mt-1 text-taupe-strong">
+    {% if status.resets_at %}{{ _("Você poderá continuar amanhã, depois da meia-noite.") }}
+    {% else %}{{ _("Você usou todo o limite disponível para a sua conta.") }}{% endif %}
+  </p>
+</div>

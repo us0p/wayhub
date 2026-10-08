@@ -72,6 +72,7 @@ jobs:
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
       - run: uv run alembic downgrade base && uv run alembic upgrade head
+      - run: uv run alembic check  # models and migrations must not drift
       - run: uv run pytest
 
   e2e:
@@ -100,7 +101,7 @@ jobs:
       - run: uv run alembic upgrade head
       - name: Start server
         run: |
-          uv run uvicorn mentor.main:app --port 8000 &
+          uv run uvicorn --factory mentor.main:create_app --port 8000 &
           timeout 30 bash -c 'until curl -sf localhost:8000/health; do sleep 1; done'
       - run: uv run pytest -m e2e --base-url http://localhost:8000 -p no:cacheprovider tests/e2e
 

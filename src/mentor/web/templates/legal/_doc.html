@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{# Shared layout for legal documents: readable line length, works logged in or out. #}
+{% block top_nav %}{% if current_user %}{{ super() }}{% endif %}{% endblock %}
+{% block bottom_nav %}{% if current_user %}{{ super() }}{% endif %}{% endblock %}
+{% block content %}
+<article class="mx-auto max-w-2xl text-sm leading-relaxed md:text-base [&_h2]:mb-2 [&_h2]:mt-8 [&_h2]:text-lg [&_h2]:font-semibold [&_li]:mt-1 [&_p]:mt-3 [&_ul]:mt-2 [&_ul]:list-disc [&_ul]:pl-5">
+  {% if not current_user %}<a href="/entrar" class="text-sm font-medium text-sage-strong underline underline-offset-4">← {{ _("Voltar") }}</a>{% endif %}
+  <h1 class="mt-4 text-2xl font-semibold md:text-3xl">{% block doc_title %}{% endblock %}</h1>
+  <p class="text-xs text-taupe-strong">{{ _("Versão") }} {% block doc_version %}{% endblock %}</p>
+  {% block doc_body %}{% endblock %}
+  <h2>{{ _("Contato") }}</h2>
+  <p>
+    {% if contact_email %}{{ _("Dúvidas ou pedidos sobre seus dados:") }} <a class="underline" href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+    {% else %}{{ _("Dúvidas ou pedidos sobre seus dados podem ser enviados pelo canal de contato informado no aplicativo.") }}{% endif %}
+  </p>
+</article>
+{% endblock %}

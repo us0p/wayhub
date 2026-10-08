@@ -17,6 +17,7 @@
   --color-sage-strong: #4e6e62;  /* sage as text/icon on light backgrounds */
   --color-surface: #ffffff;
   --color-canvas: #eef1ea;       /* page background behind cards */
+  --color-danger: #9b3328;       /* errors/destructive actions: 7.0:1 on white (D43) */
 
   --radius-card: 1.75rem;
 }

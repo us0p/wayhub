@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Mentor: a candidate-focused career platform. The product scope (in Portuguese) is in `SCOPE.md`. The current work is the Phase 1 MVP: Google login, a conversational onboarding interview (real-time voice or text), and per-job CV generation with a fit warning. The implementation plan is broken into 10 milestones, and Milestone 1 (scaffold) is done.
+Mentor: a candidate-focused career platform. The product scope (in Portuguese) is in `SCOPE.md`. The current work is the Phase 1 MVP: Google login, a conversational onboarding interview (real-time voice or text), and per-job CV generation with a fit warning. The implementation plan (10 milestones, with a status table) is in `docs/PLAN.md`; keep its status table current as milestones land.
 
 ## Decisions log (mandatory)
 
@@ -17,12 +17,15 @@ The Python toolchain is **uv** with Python 3.12 (`.python-version`). Dependencie
 ```bash
 cp .env.example .env              # first time: fill in generated POSTGRES_PASSWORD / SECRET_KEY (compose refuses to start without them)
 docker compose up                 # db (pgvector pg17) + app (runs migrations, autoreloads on 127.0.0.1:8000) + tailwind --watch
-uv run pytest                     # unit + integration (integration needs Postgres at DATABASE_URL)
+uv run pytest                     # unit + integration (integration needs a *migrated* Postgres at DATABASE_URL — use a separate DB, e.g. mentor_test)
 uv run pytest tests/unit/test_home.py::test_home_marks_active_nav_item   # single test
 uv run pytest -m e2e --base-url http://localhost:8000 tests/e2e          # Playwright mobile smoke (server must be running)
 uv run pytest -m contract         # real AI provider APIs, opt-in, needs credentials
 uv run ruff check . && uv run ruff format --check . && uv run mypy      # same gates as CI (mypy is strict)
 uv run alembic upgrade head       # migrations; revision files are named YYYYMMDD_<rev>_<slug>.py
+uv run alembic revision --autogenerate --rev-id 0003 -m "..."   # then review: enum drops in downgrade, server defaults
+uv run alembic check              # CI fails if models and migrations drift
+uv run python -m mentor show EMAIL | set-plan EMAIL tester | set-quota EMAIL job_import {N|unlimited|default}   # admin CLI
 ```
 
 `addopts` excludes the `contract` and `e2e` markers by default. Passing `-m e2e` or `-m contract` overrides that.
@@ -39,9 +42,13 @@ CI (`.github/workflows/ci.yml`) runs these jobs: secrets-scan (gitleaks over ful
 
 ## Architecture
 
-- `src/mentor/main.py`: the `create_app()` factory mounts `/static` and includes routers. Tests build the app through `create_app()` and use an httpx `ASGITransport` client (`tests/conftest.py`).
-- `settings.py`: pydantic-settings loaded from env/`.env`. `get_settings()` is cached and read lazily, so importing the app doesn't need the env. Secrets are `SecretStr` with **no defaults** (`DATABASE_URL`, `SECRET_KEY` ≥32 chars), and `APP_ENV` defaults to `prod`. Use `settings.database_dsn` for the plain URL.
-- `db.py`: async SQLAlchemy engine/sessionmaker and declarative `Base` (Alembic `target_metadata`). Inject `get_session` into routes.
+- `src/mentor/main.py`: the `create_app()` factory (run with `uvicorn --factory mentor.main:create_app`) wires middleware, routers and the exception handlers that turn `LoginRequiredError`/`ConsentRequiredError` into redirects and `QuotaExceededError` into a 429 partial. The dev-login router is only included when `APP_ENV` is dev/test.
+- `settings.py`: pydantic-settings loaded from env/`.env`. `get_settings()` is cached (tests that change env use the `fresh_settings` fixture). In prod, Google credentials and `PRIVACY_CONTACT_EMAIL` are required. Secrets are `SecretStr` with **no defaults** (`DATABASE_URL`, `SECRET_KEY` ≥32 chars), and `APP_ENV` defaults to `prod`. Use `settings.database_dsn` for the plain URL.
+- `db.py`: async SQLAlchemy engine/sessionmaker and declarative `Base`. Models live in each feature package (`auth/models.py`, `quotas/models.py`); register new model modules in `db.import_models()` or Alembic won't see them. Every user-owned table needs `ForeignKey("users.id", ondelete="CASCADE")`, since account deletion relies on it (D21).
+- Auth (`auth/`): route signatures pick a dependency alias from `auth/deps.py`: `CurrentUser` (logged in **and** consented, the default for app pages), `AuthenticatedUser` (no consent needed) or `OptionalUser`. Sessions are opaque cookie tokens, stored hashed (`auth/sessions.py`). State-changing UI actions must be `hx-post`/`hx-delete`, so htmx sends the CSRF header that `auth/csrf.py` enforces; a plain `<form method=post>` will get a 403. Redirect with `web/redirects.redirect()` (it handles htmx) and pass user-supplied targets through `safe_next()`.
+- Quotas (`quotas/service.py`): call `quotas.check(db, user, kind, amount)` before a costly action and `quotas.record(...)` after it succeeds. Limits per plan are in `PLAN_LIMITS`, overrides in `user.quota_override`.
+- Legal (`legal/`): bump `TERMS_VERSION`/`PRIVACY_VERSION` when the text changes in substance; every user is then asked to consent again.
+- Tests: `tests/integration` runs each test in a rolled-back transaction (`db`, `client` fixtures), with login helpers in `tests/integration/helpers.py`. Scope assertions to the test's own user, never to whole-table counts. No inline `style=`, `<script>` or `hx-on` in templates (the CSP blocks them, and a unit test checks).
 - `web/`: the Jinja2 environment with `jinja2.ext.i18n`. The UI is **pt-BR only**, but every user-facing string goes through `_()` (D3). Gettext is installed **newstyle**, so a literal `%` in a string must be written `%%`, and values are passed as kwargs: `_("Perfil %(p)s%% completo", p=0)`.
 - Templates: **mobile-first, always responsive to desktop (D38)**. Write the phone layout first, then adapt it with `md:`/`lg:` classes; never ship a screen that only works on one size. `base.html` renders both navs from `components/nav.html`: `bottom_nav` (dock + center FAB, `md:hidden`) and `top_nav` (hidden below `md`). Add a nav item to **both** macros. Reusable UI lives in Jinja macros under `templates/components/` (`nav.html`, `cards.html`); use these instead of re-styling ad hoc. The e2e smoke test runs every page check at 390/768/1440px.
 - Design tokens live in the `@theme` block of `static/css/input.css` (palette D4, AA shades D33). `taupe` (#93827F) is decorative only; use `taupe-strong` for muted text. Text on `bg-sage` must be `text-ink`.

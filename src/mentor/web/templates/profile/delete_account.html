@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Excluir conta") }} · Mentor{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-xl">
+  <a href="/perfil" class="text-sm font-medium text-sage-strong underline underline-offset-4">← {{ _("Voltar ao perfil") }}</a>
+  <h1 class="mt-4 text-2xl font-semibold md:text-3xl">{{ _("Excluir conta") }}</h1>
+  <p class="mt-3 text-sm leading-relaxed">{{ _("Isso apaga imediatamente e de forma definitiva seu perfil, entrevistas, vagas, currículos e histórico de uso. Não é possível desfazer.") }}</p>
+  <form hx-post="/conta/excluir" class="mt-6 space-y-4">
+    <label class="block text-sm font-medium">{{ _("Digite %(word)s para confirmar", word=confirmation) }}
+      <input name="confirmacao" required autocomplete="off" autocapitalize="characters"
+             class="mt-1 w-full rounded-2xl border border-moss px-4 py-3 text-base">
+    </label>
+    {% if error %}<p role="alert" class="text-sm font-medium text-danger">{{ _("A confirmação não confere.") }}</p>{% endif %}
+    <button class="w-full rounded-full bg-danger px-6 py-3.5 text-sm font-semibold text-white md:w-auto md:px-8">{{ _("Excluir definitivamente") }}</button>
+  </form>
+</div>
+{% endblock %}

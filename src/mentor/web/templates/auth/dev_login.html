@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Login de teste") }} · Mentor{% endblock %}
+{% block top_nav %}{% endblock %}
+{% block bottom_nav %}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-sm">
+  <p class="inline-block rounded-full bg-cream px-3 py-1 text-xs font-semibold">{{ _("Somente desenvolvimento") }}</p>
+  <h1 class="mt-4 text-2xl font-semibold">{{ _("Login de teste") }}</h1>
+  <form hx-post="/auth/dev-login" class="mt-6 space-y-4">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="block text-sm font-medium">{{ _("E-mail") }}
+      <input name="email" type="email" required autocomplete="email" class="mt-1 w-full rounded-2xl border border-moss px-4 py-3 text-base">
+    </label>
+    <label class="block text-sm font-medium">{{ _("Nome (opcional)") }}
+      <input name="name" type="text" class="mt-1 w-full rounded-2xl border border-moss px-4 py-3 text-base">
+    </label>
+    <label class="block text-sm font-medium">{{ _("Plano") }}
+      <select name="plan" class="mt-1 w-full rounded-2xl border border-moss bg-surface px-4 py-3 text-base">
+        {% for plan in plans %}<option value="{{ plan.value }}" {% if plan.value == "tester" %}selected{% endif %}>{{ plan.value }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="w-full rounded-full bg-sage px-6 py-3.5 text-sm font-semibold text-ink shadow">{{ _("Entrar") }}</button>
+  </form>
+</div>
+{% endblock %}
