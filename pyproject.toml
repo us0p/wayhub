@@ -19,6 +19,9 @@ dependencies = [
     "httpx>=0.28.1",
     "tzdata>=2026.5",
     "email-validator>=2.3.0",
+    "google-genai>=2.29.0",
+    "google-cloud-speech>=2.41.0",
+    "google-cloud-texttospeech>=2.38.0",
 ]
 
 [dependency-groups]
