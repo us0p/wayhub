@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Mentor: a candidate-focused career platform. The product scope (in Portuguese) is in `SCOPE.md`. The current work is the Phase 1 MVP: Google login, a conversational onboarding interview (real-time voice or text), and per-job CV generation with a fit warning. The implementation plan is broken into 10 milestones, and Milestone 1 (scaffold) is done.
+Mentor: a candidate-focused career platform. The product scope (in Portuguese) is in `SCOPE.md`. The current work is the Phase 1 MVP: Google login, a conversational onboarding interview (real-time voice or text), and per-job CV generation with a fit warning. The implementation plan (10 milestones, with a status table) is in `docs/PLAN.md`; keep its status table current as milestones land.
 
 ## Decisions log (mandatory)
 
