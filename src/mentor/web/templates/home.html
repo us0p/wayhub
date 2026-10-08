@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "components/cards.html" import hero_card, tint_card, primary_button, progress_ring %}
+{% block content %}
+<header class="mb-6 md:mb-8">
+  <h1 class="text-2xl font-semibold leading-snug md:text-4xl">
+    {{ _("Vamos montar seu") }}<br class="md:hidden"> <span class="text-sage-strong">{{ _("próximo passo") }}</span>
+  </h1>
+</header>
+
+<div class="md:grid md:grid-cols-12 md:gap-6">
+  <div class="md:col-span-7 lg:col-span-8">
+    {% call hero_card() %}
+    <div class="flex items-center justify-between gap-4 md:gap-8 md:py-4">
+      <div>
+        <p class="text-sm leading-relaxed md:text-lg">{{ _("Conte sua trajetória e a gente monta CVs sob medida para cada vaga.") }}</p>
+        <div class="mt-4 md:mt-6">{{ primary_button(_("Começar entrevista"), "/entrevista") }}</div>
+      </div>
+      <div class="shrink-0 text-cream md:[&>svg]:h-28 md:[&>svg]:w-28">{{ progress_ring(0, _("Perfil %(p)s%% completo", p=0)) }}</div>
+    </div>
+    {% endcall %}
+  </div>
+
+  <section class="md:col-span-5 lg:col-span-4" aria-labelledby="how-it-works">
+    <h2 id="how-it-works" class="mb-4 mt-8 text-lg font-semibold md:mt-0 md:sr-only">{{ _("Como funciona") }}</h2>
+    <div class="grid grid-cols-2 gap-4">
+      {% call tint_card("/entrevista", "plain") %}
+        <p class="font-semibold">{{ _("Entrevista") }}</p>
+        <p class="mt-1 text-xs text-taupe-strong">{{ _("Por voz ou texto") }}</p>
+      {% endcall %}
+      {% call tint_card("/vagas/nova", "cream") %}
+        <p class="font-semibold">{{ _("Nova vaga") }}</p>
+        <p class="mt-1 text-xs text-taupe-strong">{{ _("Link, print, PDF ou texto") }}</p>
+      {% endcall %}
+      {% call tint_card("/vagas", "cream") %}
+        <p class="font-semibold">{{ _("Seu fit") }}</p>
+        <p class="mt-1 text-xs text-taupe-strong">{{ _("Veja o que a vaga pede") }}</p>
+      {% endcall %}
+      {% call tint_card("/vagas", "dark") %}
+        <p class="font-semibold">{{ _("CVs gerados") }}</p>
+        <p class="mt-1 text-xs text-moss">{{ _("PDF e DOCX") }}</p>
+      {% endcall %}
+    </div>
+  </section>
+</div>
+{% endblock %}

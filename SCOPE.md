@@ -1,4 +1,4 @@
-# WayHub — Escopo do Produto
+# Mentor — Escopo do Produto
 
 > Documento gerado a partir de sessão de "grilling" (stress-test de escopo) em 2026-09-11.
 > Registra as decisões de escopo tomadas, o raciocínio por trás delas e os riscos conhecidos e conscientemente aceitos.
@@ -85,7 +85,7 @@ Taxa de resposta positiva às aplicações (não "qualidade de match" abstrata �
 
 Hoje a Fase 1 avisa o candidato sobre fit ruim ("a vaga pede X anos de Y, você declarou Z") e para aí. A Fase 1.5 fecha o ciclo: a partir do gap identificado, o sistema indica **trilhas de aprendizado** e, para gaps de anos de experiência, **projetos práticos** que o candidato pode usar como argumento.
 
-- **Agregador, não produtor de conteúdo**: o WayHub organiza conteúdo público e gratuito existente. Não produz formação.
+- **Agregador, não produtor de conteúdo**: o Mentor organiza conteúdo público e gratuito existente. Não produz formação.
 - **Pipeline automático**: sem curadoria manual item a item. O admin configura regras e trata exceções.
 - O objetivo é preparar o candidato para a vaga, não ensinar. Por isso a atenção durante o vídeo não é medida (limite aceito).
 
@@ -100,9 +100,9 @@ Hoje a Fase 1 avisa o candidato sobre fit ruim ("a vaga pede X anos de Y, você 
 
 - **Fontes**: GitHub (listas curadas e repositórios como o roadmap.sh), Hacker News e freeCodeCamp.
 - **Regra de entrada**: o item aparece em pelo menos **N listas distintas** (inicial: N=2) e tem **embed habilitado**. Sem critério de popularidade do YouTube e sem critério de recência.
-- **Avaliação**: listas curadas pela comunidade automatizadas como base; avaliações dos usuários do WayHub (utilidade, desatualização) assumem o sinal com o tempo.
+- **Avaliação**: listas curadas pela comunidade automatizadas como base; avaliações dos usuários do Mentor (utilidade, desatualização) assumem o sinal com o tempo.
 - **Idioma**: qualquer um. O candidato vê os idiomas disponíveis antes de começar, quando o dado existir.
-- **Estrutura**: playlists viram várias aulas dentro do WayHub, para medir o progresso por aula.
+- **Estrutura**: playlists viram várias aulas dentro do Mentor, para medir o progresso por aula.
 - **Consumo**: vídeos no **player embutido oficial** do YouTube (IFrame Player API), sem alterar ou esconder o player. Se o criador desativar o embed, o item sai.
 - **Blogs e materiais sem embed**: **link-out**, organizados na sequência da trilha no estilo roadmap.sh. Sem scraping com exibição interna (atribuição não é licença). O progresso é marcação manual, com confiança menor.
 - **Mapeamento às skills**: o item herda o tópico da fonte; um LLM normaliza para a taxonomia e estima o nível, com nota de confiança. Abaixo do limiar, o item não é publicado e vai para a fila de exceções.
@@ -144,10 +144,10 @@ Hoje a Fase 1 avisa o candidato sobre fit ruim ("a vaga pede X anos de Y, você 
 
 ### Atualização da matriz (Modelo A preservado)
 
-- Concluir a trilha inteira de uma skill no WayHub atualiza a matriz automaticamente como **formação** ("concluiu a trilha X no WayHub"), com origem registrada, sem anos e com nível básico. **Nunca é tratada como experiência.**
+- Concluir a trilha inteira de uma skill no Mentor atualiza a matriz automaticamente como **formação** ("concluiu a trilha X no Mentor"), com origem registrada, sem anos e com nível básico. **Nunca é tratada como experiência.**
 - A atualização é automática **só para conclusões medidas pelo player**. Conclusões por marcação manual pedem confirmação do candidato.
 - Só a **trilha inteira** dispara a atualização, não a aula.
-- A atualização é **explícita** para o usuário ("sua matriz foi atualizada com X"), como incentivo a concluir dentro do WayHub, e ele pode editar ou remover a entrada.
+- A atualização é **explícita** para o usuário ("sua matriz foi atualizada com X"), como incentivo a concluir dentro do Mentor, e ele pode editar ou remover a entrada.
 - No CV gerado, a skill aprendida por trilha aparece marcada como formação, não como experiência.
 
 ### Match na Fase 1 com formação e projetos
@@ -243,7 +243,7 @@ Isso é o diferencial concreto de mercado: nenhum player líder de sourcing B2B 
 - O candidato pode **sair do ranking** a qualquer momento ou optar por não receber as informações dele. A vaga fechada encerra o ranking.
 - A posição é recalculada conforme os demais avançam.
 - **Score único ponderado** de **comprometimento** e **score do teste situacional**:
-  - Pesos padrão definidos pelo WayHub, personalizáveis pelo recrutador por vaga. Os pesos usados ficam registrados no dossiê daquela vaga.
+  - Pesos padrão definidos pelo Mentor, personalizáveis pelo recrutador por vaga. Os pesos usados ficam registrados no dossiê daquela vaga.
   - **Critério ausente não penaliza**: quem não tem teste vigente (validade de 3 meses) ou trilhas é ordenado pelos critérios que tem, e o ranking sinaliza "dados parciais".
   - O recrutador vê a **decomposição** do score e os pesos aplicados.
   - O **fit declarado** fica fora do cálculo; o recrutador pode usá-lo como filtro opcional.
@@ -281,7 +281,7 @@ Achados de pesquisa de mercado que embasaram as decisões acima:
 - **Padrão "aparece na vitrine" e identidade visível a recrutadores**: decisão consciente. Um padrão pré-ativado é um tratamento que a ANPD pode questionar (princípio da finalidade, Art. 6, I), principalmente para quem se cadastrou na Fase 1 sem essa finalidade. Mitigação mínima: aviso claro no cadastro, notificação dos usuários existentes, opt-out fácil de achar e bloqueio de empresas.
 - **Empregador atual pode ver o candidato na vitrine**: mitigado pelo bloqueio de empresas (verificadas, no servidor) e pela saída da vitrine; não eliminado.
 - **Atenção no vídeo não é medida**: o candidato pode deixar o vídeo rodando. Limite aceito, porque o objetivo é preparar para a vaga, não ensinar. As métricas de comprometimento da Fase 2 herdam esse limite.
-- **Dossiê visto pelo recrutador**: o WayHub não controla o que o recrutador faz com ele depois de acessado; depende dos termos do recrutador.
+- **Dossiê visto pelo recrutador**: o Mentor não controla o que o recrutador faz com ele depois de acessado; depende dos termos do recrutador.
 - **Risco de acessibilidade no ranking**: o teste cronometrado pesa no score do ranking, o que reforça o risco sob a LBI já descrito.
 - **Uso do YouTube**: depende de os termos da API permitirem o player embutido com medição de eventos e de criadores não desativarem o embed; a premissa deve ser verificada nos termos oficiais na implementação.
 
@@ -298,7 +298,7 @@ Achados de pesquisa de mercado que embasaram as decisões acima:
 
 ## Ideias avaliadas e descartadas
 
-- **Treinamento patrocinado por empresa, por vaga** (modelo da HR Path): descartado. Inverte o foco no candidato, exige produção de conteúdo e parcerias, e é um terceiro produto fora do escopo. O WayHub seguirá como agregador.
+- **Treinamento patrocinado por empresa, por vaga** (modelo da HR Path): descartado. Inverte o foco no candidato, exige produção de conteúdo e parcerias, e é um terceiro produto fora do escopo. O Mentor seguirá como agregador.
 - **Velocidade bruta de conclusão como proxy de motivação**: descartada pelos vieses de disponibilidade e acessibilidade; substituída por consistência e taxa de conclusão.
 - **Ranking público por vaga** (nome visível a outros candidatos): descartado. O ranking é privado; o candidato vê só a sua posição.
 - **Curadoria manual item a item e popularidade do YouTube** como critério de entrada no catálogo: descartados em favor do pipeline automático com listas curadas.

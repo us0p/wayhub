@@ -1,0 +1,16 @@
+.git
+.venv
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+service-account*.json
+**/__pycache__
+.mypy_cache
+.ruff_cache
+.pytest_cache
+bin/tailwindcss
+src/mentor/web/static/css/app.css
+test-results
