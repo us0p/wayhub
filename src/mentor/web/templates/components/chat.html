@@ -95,7 +95,7 @@
      that reloads the page and loses the message. #}
   <div class="flex items-end gap-2">
     <label for="texto" class="sr-only">{{ _("Sua resposta") }}</label>
-    <textarea id="texto" name="texto" rows="2" maxlength="4000" enterkeyhint="send" {% if disabled %}disabled{% endif %}
+    <textarea id="texto" name="texto" rows="2" maxlength="4000" {% if disabled %}disabled{% endif %}
               placeholder="{{ _('Escreva sua resposta…') if not disabled else _('Aguarde a resposta…') }}"
               class="min-h-12 flex-1 resize-none rounded-3xl border border-moss bg-surface px-4 py-3 text-sm focus:border-sage-strong focus:outline-none disabled:bg-canvas"></textarea>
     <button type="button" data-send hx-post="/entrevista/turnos" hx-include="#texto" hx-target="#transcript" hx-swap="beforeend show:bottom"

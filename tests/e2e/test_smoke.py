@@ -189,7 +189,13 @@ def test_text_interview(viewport_page: tuple[str, Page], base_url: str) -> None:
     box.press("Shift+Enter")
     assert box.input_value() == "linha 1\n"  # Shift+Enter is a new line, not a send
     box.fill("Sou desenvolvedora backend em São Paulo.")
-    page.get_by_label("Sua resposta").press("Enter")  # Enter sends (Shift+Enter is a new line)
+    if kind == "mobile":  # touch screens: Enter is a new line, only the button sends
+        box.press("Enter")
+        assert box.input_value().endswith("Paulo.\n")
+        box.fill("Sou desenvolvedora backend em São Paulo.")
+        page.get_by_role("button", name="Enviar").click()
+    else:  # Enter sends
+        box.press("Enter")
 
     expect(page.get_by_text("Sou desenvolvedora backend em São Paulo.")).to_be_visible()
     expect(page.get_by_text("Resposta de teste.")).to_be_visible()

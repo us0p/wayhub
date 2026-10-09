@@ -1,25 +1,16 @@
 // Small progressive enhancements (no inline scripts: the CSP forbids them, D37).
 
-// Interview composer: Enter sends the message, Shift+Enter adds a line. `beforeinput` covers
-// phone keyboards, which may not report Enter as a key press.
-function sendFrom(textarea) {
-  if (textarea.disabled || !textarea.value.trim()) return;
-  const button = textarea.closest("#composer")?.querySelector("[data-send]");
-  if (button && !button.disabled) button.click();
-}
-
-let shiftDown = false;
+// Interview composer: on a computer Enter sends the message and Shift+Enter adds a line. On a
+// phone (touch screen) Enter always adds a line and only the send button sends.
+const touchScreen = window.matchMedia("(pointer: coarse)");
 document.addEventListener("keydown", (event) => {
-  shiftDown = event.shiftKey;
   const target = event.target;
   if (target.id !== "texto" || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  if (touchScreen.matches || target.disabled || !target.value.trim()) return;
+  const button = target.closest("#composer")?.querySelector("[data-send]");
+  if (!button || button.disabled) return;
   event.preventDefault();
-  sendFrom(target);
-});
-document.addEventListener("beforeinput", (event) => {
-  if (event.target.id !== "texto" || event.inputType !== "insertLineBreak" || shiftDown) return;
-  event.preventDefault();
-  sendFrom(event.target);
+  button.click();
 });
 
 // Confirmation modal: a button with data-confirm="message" opens it; "yes" fires the button's
