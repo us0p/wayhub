@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_location: str = "global"
     gemini_model: str = "gemini-3.8-flash"
+    # Tried once when the main model is overloaded (D51); empty = no fallback.
+    gemini_fallback_model: str | None = "gemini-3.7-flash"
     gemini_embedding_model: str = "gemini-embedding-001"
     embedding_dimensions: int = Field(default=768, gt=0)
 

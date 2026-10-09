@@ -1,8 +1,9 @@
 import pytest
 
-from mentor.ai.adapters.fake import FakeEmbedder, FakeLLM, FakeSTT, FakeTTS
-from mentor.ai.adapters.gemini import GeminiEmbedder, GeminiLLM, GeminiVision
+from mentor.ai.adapters.fake import FakeChatModels, FakeEmbeddings, FakeSTT, FakeTTS
+from mentor.ai.adapters.gemini import GeminiChatModels
 from mentor.ai.adapters.google_speech import GoogleSTT, GoogleTTS
+from mentor.ai.embeddings import NormalizedEmbeddings
 from mentor.ai.ports import AIConfigurationError
 from mentor.ai.registry import build_ai, get_ai
 from mentor.settings import Settings
@@ -27,26 +28,29 @@ def test_tests_run_with_fake_adapters() -> None:
     get_ai.cache_clear()
     ai = get_ai()
 
-    assert isinstance(ai.llm, FakeLLM)
+    assert isinstance(ai.chat, FakeChatModels)
     assert isinstance(ai.stt, FakeSTT)
 
 
-def test_fakes_share_one_llm_and_honor_embedding_dimensions() -> None:
-    ai = build_ai(_settings(**FAKE, embedding_dimensions=32))
+def test_embedding_dimensions_must_match_the_database() -> None:
+    with pytest.raises(AIConfigurationError, match="768"):
+        build_ai(_settings(**FAKE, embedding_dimensions=32))
 
-    assert isinstance(ai.llm, FakeLLM)
-    assert ai.vision.llm is ai.llm  # type: ignore[attr-defined]
-    assert isinstance(ai.embedder, FakeEmbedder)
-    assert ai.embedder.dimensions == 32
+
+def test_fakes_honor_embedding_dimensions() -> None:
+    ai = build_ai(_settings(**FAKE, embedding_dimensions=768))
+
+    assert isinstance(ai.chat, FakeChatModels)
+    assert isinstance(ai.embeddings, FakeEmbeddings)
+    assert ai.embeddings.dimensions == 768
     assert isinstance(ai.tts, FakeTTS)
 
 
 def test_real_providers_are_built_without_contacting_them() -> None:
     ai = build_ai(_settings(**REAL, gemini_api_key="k", google_cloud_project="proj"))
 
-    assert isinstance(ai.llm, GeminiLLM)
-    assert isinstance(ai.vision, GeminiVision)
-    assert isinstance(ai.embedder, GeminiEmbedder)
+    assert isinstance(ai.chat, GeminiChatModels)
+    assert isinstance(ai.embeddings, NormalizedEmbeddings)
     assert isinstance(ai.stt, GoogleSTT)
     assert isinstance(ai.tts, GoogleTTS)
 
@@ -54,8 +58,8 @@ def test_real_providers_are_built_without_contacting_them() -> None:
 def test_each_port_is_selected_independently() -> None:
     ai = build_ai(_settings(**{**FAKE, "ai_embedder": "gemini"}, gemini_api_key="k"))
 
-    assert isinstance(ai.llm, FakeLLM)
-    assert isinstance(ai.embedder, GeminiEmbedder)
+    assert isinstance(ai.chat, FakeChatModels)
+    assert isinstance(ai.embeddings, NormalizedEmbeddings)
 
 
 def test_vertex_backend_needs_a_project_not_an_api_key() -> None:
@@ -67,7 +71,7 @@ def test_vertex_backend_needs_a_project_not_an_api_key() -> None:
             **{**FAKE, "ai_llm": "gemini"}, gemini_backend="vertex", google_cloud_project="proj"
         )
     )
-    assert isinstance(ai.llm, GeminiLLM)
+    assert isinstance(ai.chat, GeminiChatModels)
 
 
 def test_missing_credentials_fail_with_a_clear_error() -> None:

@@ -13,10 +13,18 @@
     {% call hero_card() %}
     <div class="flex items-center justify-between gap-4 md:gap-8 md:py-4">
       <div>
+        {% if interview_status == "complete" %}
+        <p class="text-sm leading-relaxed md:text-lg">{{ _("Seu perfil está pronto. Revise as informações antes de gerar seus CVs.") }}</p>
+        <div class="mt-4 md:mt-6">{{ primary_button(_("Revisar perfil"), "/perfil") }}</div>
+        {% elif interview_status %}
+        <p class="text-sm leading-relaxed md:text-lg">{{ _("Sua entrevista está em andamento. Continue de onde parou.") }}</p>
+        <div class="mt-4 md:mt-6">{{ primary_button(_("Continuar entrevista"), "/entrevista") }}</div>
+        {% else %}
         <p class="text-sm leading-relaxed md:text-lg">{{ _("Conte sua trajetória e a gente monta CVs sob medida para cada vaga.") }}</p>
         <div class="mt-4 md:mt-6">{{ primary_button(_("Começar entrevista"), "/entrevista") }}</div>
+        {% endif %}
       </div>
-      <div class="shrink-0 text-cream md:[&>svg]:h-28 md:[&>svg]:w-28">{{ progress_ring(0, _("Perfil %(p)s%% completo", p=0)) }}</div>
+      <div class="shrink-0 text-cream md:[&>svg]:h-28 md:[&>svg]:w-28">{{ progress_ring(progress.percent, _("Perfil %(p)s%% completo", p=progress.percent)) }}</div>
     </div>
     {% endcall %}
   </div>

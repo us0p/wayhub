@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from mentor.agents.checkpoint import CHECKPOINT_TABLES
 from mentor.db import Base, import_models
 from mentor.settings import get_settings
 
@@ -16,16 +17,26 @@ import_models()
 target_metadata = Base.metadata
 
 
+def include_name(name: str | None, type_: str, parent_names: object) -> bool:
+    """The LangGraph checkpointer owns its tables (D56); autogenerate must not drop them."""
+    return not (type_ == "table" and name in CHECKPOINT_TABLES)
+
+
 def run_migrations_offline() -> None:
     context.configure(
-        url=get_settings().database_dsn, target_metadata=target_metadata, literal_binds=True
+        url=get_settings().database_dsn,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, target_metadata=target_metadata, include_name=include_name
+    )
     with context.begin_transaction():
         context.run_migrations()
 

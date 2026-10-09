@@ -27,6 +27,11 @@ env:
   # Test-only values for the ephemeral CI database (no password: trust auth, see header).
   APP_ENV: test
   DATABASE_URL: postgresql+asyncpg://postgres@localhost:5432/mentor_test
+  # The e2e server uses the deterministic fake AI adapters (D45); pytest forces them anyway.
+  AI_LLM: fake
+  AI_EMBEDDER: fake
+  AI_STT: fake
+  AI_TTS: fake
 
 jobs:
   secrets-scan:

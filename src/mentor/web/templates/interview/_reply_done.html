@@ -1,0 +1,5 @@
+{% from "components/chat.html" import bubble, progress_compact, progress_panel, composer %}
+<div hx-swap-oob="outerHTML:#pending-{{ turn.id }}">{{ bubble("assistant", reply.text, "turn-" ~ reply.id) }}</div>
+{{ progress_compact(progress, oob=True) }}
+{{ progress_panel(progress, oob=True) }}
+{{ composer(complete=complete, oob=True) }}

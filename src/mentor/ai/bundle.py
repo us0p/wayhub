@@ -1,14 +1,15 @@
 from dataclasses import dataclass
 
-from mentor.ai.ports import LLM, STT, TTS, Embedder, Vision
+from langchain_core.embeddings import Embeddings
+
+from mentor.ai.ports import STT, TTS, ChatModels
 
 
 @dataclass(frozen=True)
 class AI:
-    """The adapters for every AI port, as selected by `mentor.ai.registry`."""
+    """The AI services selected by `mentor.ai.registry` (D55)."""
 
-    llm: LLM
-    vision: Vision
-    embedder: Embedder
+    chat: ChatModels
+    embeddings: Embeddings  # unit-length vectors of the database's dimension
     stt: STT
     tts: TTS

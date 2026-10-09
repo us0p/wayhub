@@ -1,203 +1,106 @@
-"""GeminiLLM/GeminiEmbedder against a stub client: request mapping and error handling. Real
-API behavior is covered by tests/contract."""
+"""How the Gemini models are configured through LangChain (no network). Real API behavior is
+covered by tests/contract."""
 
 import math
-from collections.abc import AsyncIterator
-from types import SimpleNamespace
-from typing import Any, cast
 
 import pytest
-from google import genai
-from google.genai import errors, types
+from langchain_core.embeddings import Embeddings
+from langchain_core.runnables import RunnableWithFallbacks
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from pydantic import BaseModel
 
-from mentor.ai.adapters.gemini import EMBED_BATCH, GeminiEmbedder, GeminiLLM, GeminiVision
-from mentor.ai.ports import (
-    AIOutputError,
-    AIProviderError,
-    EmbedPurpose,
-    Image,
-    Message,
-    Role,
-    Usage,
-)
+from mentor.ai.adapters.gemini import ATTEMPTS, TIMEOUT_SECONDS, GeminiChatModels, make_embeddings
+from mentor.ai.embeddings import NormalizedEmbeddings, normalize
+from mentor.ai.ports import AIConfigurationError, AIOutputError, Effort
+from mentor.settings import Settings
 
-CONVERSATION = [
-    Message(Role.SYSTEM, "Você é um entrevistador."),
-    Message(Role.ASSISTANT, "Qual é o seu nome?"),
-    Message(Role.USER, "Ana"),
-]
+
+@pytest.fixture(autouse=True)
+def _no_ai_credentials_in_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("GEMINI_BACKEND", "GEMINI_API_KEY", "GOOGLE_CLOUD_PROJECT"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def _settings(**overrides: object) -> Settings:
+    values = {
+        "database_url": "postgresql+asyncpg://u@h/db",
+        "secret_key": "x" * 32,
+        "app_env": "test",
+        "gemini_api_key": "k",
+        "gemini_model": "main",
+        "gemini_fallback_model": "backup",
+        **overrides,
+    }
+    return Settings(_env_file=None, **values)  # type: ignore[arg-type]
 
 
 class Answer(BaseModel):
     name: str
 
 
-def _response(text: str | None) -> types.GenerateContentResponse:
-    parts = [types.Part.from_text(text=text)] if text is not None else []
-    return types.GenerateContentResponse(
-        candidates=[types.Candidate(content=types.Content(role="model", parts=parts))],
-        usage_metadata=types.GenerateContentResponseUsageMetadata(
-            prompt_token_count=12, candidates_token_count=3
-        ),
-    )
+def test_chat_uses_the_main_model_with_retries_and_falls_back() -> None:
+    chat = GeminiChatModels(_settings()).chat(effort=Effort.LOW)
+
+    assert isinstance(chat, RunnableWithFallbacks)
+    main, backup = chat.runnable, chat.fallbacks[0]
+    assert isinstance(main, ChatGoogleGenerativeAI)
+    assert isinstance(backup, ChatGoogleGenerativeAI)
+    assert (main.model, backup.model) == ("main", "backup")
+    assert main.reasoning_effort == backup.reasoning_effort == "low"  # Gemini thinking_level
+    assert (main.max_retries, main.timeout) == (ATTEMPTS, TIMEOUT_SECONDS)
 
 
-class StubModels:
-    def __init__(self) -> None:
-        self.requests: list[dict[str, Any]] = []
-        self.responses: list[Any] = []
+def test_default_effort_leaves_the_thinking_level_to_the_model() -> None:
+    chat = GeminiChatModels(_settings(gemini_fallback_model="")).chat()
 
-    def _next(self, **request: Any) -> Any:
-        self.requests.append(request)
-        response = self.responses.pop(0)
-        if isinstance(response, Exception):
-            raise response
-        return response
-
-    async def generate_content(self, **request: Any) -> Any:
-        return self._next(**request)
-
-    async def generate_content_stream(self, **request: Any) -> AsyncIterator[Any]:
-        chunks = self._next(**request)
-
-        async def iterate() -> AsyncIterator[Any]:
-            for chunk in chunks:
-                if isinstance(chunk, Exception):
-                    raise chunk
-                yield chunk
-
-        return iterate()
-
-    async def embed_content(self, **request: Any) -> Any:
-        return self._next(**request)
+    assert isinstance(chat, ChatGoogleGenerativeAI)  # no fallback configured
+    assert chat.reasoning_effort is None
 
 
-@pytest.fixture
-def models() -> StubModels:
-    return StubModels()
+def test_models_are_reused_per_name_and_effort() -> None:
+    models = GeminiChatModels(_settings(gemini_fallback_model=""))
+
+    assert models.chat(effort=Effort.LOW) is models.chat(effort=Effort.LOW)
+    assert models.chat(effort=Effort.LOW) is not models.chat()
 
 
-@pytest.fixture
-def client(models: StubModels) -> genai.Client:
-    return cast(genai.Client, SimpleNamespace(aio=SimpleNamespace(models=models)))
+def test_structured_output_has_a_fallback_too() -> None:
+    structured = GeminiChatModels(_settings()).structured(Answer)
+
+    assert isinstance(structured, RunnableWithFallbacks)
+    assert len(structured.fallbacks) == 1
 
 
-def _api_error(code: int) -> errors.APIError:
-    return errors.APIError(code, {"error": {"message": "segredo do usuário", "status": "X"}})
+def test_missing_credentials_are_reported() -> None:
+    with pytest.raises(AIConfigurationError, match="GEMINI_API_KEY"):
+        GeminiChatModels(_settings(gemini_api_key=None))
+    with pytest.raises(AIConfigurationError, match="GOOGLE_CLOUD_PROJECT"):
+        GeminiChatModels(_settings(gemini_backend="vertex"))
 
 
-async def test_generate_maps_roles_and_system_prompt(
-    client: genai.Client, models: StubModels
-) -> None:
-    models.responses = [_response("Prazer, Ana!")]
+def test_embeddings_are_truncated_to_the_database_size_and_normalized() -> None:
+    embeddings = make_embeddings(_settings())
 
-    result = await GeminiLLM(client, "m").generate(CONVERSATION)
-
-    assert result.text == "Prazer, Ana!"
-    assert result.usage == Usage(input_tokens=12, output_tokens=3)
-    request = models.requests[0]
-    assert request["model"] == "m"
-    assert request["config"].system_instruction == "Você é um entrevistador."
-    assert [(c.role, c.parts[0].text) for c in request["contents"]] == [
-        ("model", "Qual é o seu nome?"),
-        ("user", "Ana"),
-    ]
+    assert isinstance(embeddings, NormalizedEmbeddings)
+    assert isinstance(embeddings.inner, GoogleGenerativeAIEmbeddings)
+    assert embeddings.inner.output_dimensionality == 768
 
 
-async def test_generate_structured_requests_json_schema_and_validates(
-    client: genai.Client, models: StubModels
-) -> None:
-    models.responses = [_response('{"name": "Ana"}')]
+class _Raw(Embeddings):
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[3.0, 4.0] for _ in texts]
 
-    result = await GeminiLLM(client, "m").generate_structured(CONVERSATION, Answer)
-
-    assert result.value == Answer(name="Ana")
-    config = models.requests[0]["config"]
-    assert config.response_mime_type == "application/json"
-    assert config.response_json_schema == Answer.model_json_schema()
+    def embed_query(self, text: str) -> list[float]:
+        return [0.0, 2.0]
 
 
-@pytest.mark.parametrize("text", ['{"nome": "Ana"}', "not json", None])
-async def test_invalid_or_empty_output_raises_output_error(
-    client: genai.Client, models: StubModels, text: str | None
-) -> None:
-    models.responses = [_response(text)]
+async def test_normalized_embeddings_scale_to_unit_length_and_check_size() -> None:
+    embeddings = NormalizedEmbeddings(_Raw(), dimensions=2)
 
+    assert await embeddings.aembed_documents(["a"]) == [[0.6, 0.8]]
+    assert await embeddings.aembed_query("a") == [0.0, 1.0]
     with pytest.raises(AIOutputError):
-        await GeminiLLM(client, "m").generate_structured(CONVERSATION, Answer)
-
-
-async def test_api_errors_become_provider_errors_without_echoing_content(
-    client: genai.Client, models: StubModels
-) -> None:
-    models.responses = [_api_error(429)]
-
-    with pytest.raises(AIProviderError) as exc:
-        await GeminiLLM(client, "m").generate(CONVERSATION)
-
-    assert "429" in str(exc.value)
-    assert "segredo" not in str(exc.value)
-
-
-async def test_stream_yields_text_chunks_and_maps_errors(
-    client: genai.Client, models: StubModels
-) -> None:
-    llm = GeminiLLM(client, "m")
-    models.responses = [[_response("Olá, "), _response(None), _response("Ana!")]]
-    assert [c async for c in llm.stream(CONVERSATION)] == ["Olá, ", "Ana!"]
-
-    models.responses = [[_response("Olá"), _api_error(503)]]
-    with pytest.raises(AIProviderError):
-        [c async for c in llm.stream(CONVERSATION)]
-
-
-async def test_vision_attaches_images_to_the_last_user_turn(
-    client: genai.Client, models: StubModels
-) -> None:
-    models.responses = [_response('{"name": "Vaga"}')]
-    images = [Image(b"a", "image/png"), Image(b"b", "application/pdf")]
-
-    await GeminiVision(GeminiLLM(client, "m")).generate_structured(
-        [Message(Role.USER, "Extraia a vaga.")], images, Answer
-    )
-
-    [content] = models.requests[0]["contents"]
-    assert content.parts[0].text == "Extraia a vaga."
-    assert [(p.inline_data.data, p.inline_data.mime_type) for p in content.parts[1:]] == [
-        (b"a", "image/png"),
-        (b"b", "application/pdf"),
-    ]
-
-
-def _embeddings(*vectors: list[float]) -> types.EmbedContentResponse:
-    return types.EmbedContentResponse(
-        embeddings=[types.ContentEmbedding(values=v) for v in vectors]
-    )
-
-
-async def test_embed_batches_normalizes_and_sets_task_type(
-    client: genai.Client, models: StubModels
-) -> None:
-    texts = [f"t{i}" for i in range(EMBED_BATCH + 1)]
-    models.responses = [
-        _embeddings(*([[3.0, 4.0]] * EMBED_BATCH)),
-        _embeddings([0.0, 2.0]),
-    ]
-
-    vectors = await GeminiEmbedder(client, "e", 2).embed(texts, purpose=EmbedPurpose.QUERY)
-
-    assert len(vectors) == EMBED_BATCH + 1
-    assert vectors[0] == [0.6, 0.8]
-    assert vectors[-1] == [0.0, 1.0]
-    assert all(math.isclose(sum(v * v for v in vec), 1.0) for vec in vectors)
-    assert [len(r["contents"]) for r in models.requests] == [EMBED_BATCH, 1]
-    config = models.requests[0]["config"]
-    assert (config.task_type, config.output_dimensionality) == ("RETRIEVAL_QUERY", 2)
-
-
-async def test_embed_rejects_wrong_dimensions(client: genai.Client, models: StubModels) -> None:
-    models.responses = [_embeddings([1.0, 0.0, 0.0])]
-
+        await NormalizedEmbeddings(_Raw(), dimensions=3).aembed_query("a")
     with pytest.raises(AIOutputError):
-        await GeminiEmbedder(client, "e", 2).embed(["x"], purpose=EmbedPurpose.DOCUMENT)
+        normalize([0.0, 0.0], 2)
+    assert math.isclose(sum(v * v for v in normalize([1.0, 1.0], 2)), 1.0)

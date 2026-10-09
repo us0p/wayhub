@@ -85,3 +85,31 @@ def test_delete_account(viewport_page: tuple[str, Page], base_url: str) -> None:
     page.get_by_label("Digite EXCLUIR para confirmar").fill("EXCLUIR")
     page.get_by_role("button", name="Excluir definitivamente").click()
     expect(page.get_by_text("Sua conta e todos os seus dados foram excluídos.")).to_be_visible()
+
+
+def test_text_interview(viewport_page: tuple[str, Page], base_url: str) -> None:
+    """Text interview against the fake LLM (AI_LLM=fake): the reply streams in over SSE."""
+    kind, page = viewport_page
+
+    _sign_up(page, base_url)
+    page.get_by_role("link", name="Entrevista", exact=True).click()
+    page.wait_for_load_state("load")  # htmx and its sse extension are deferred scripts
+    expect(page.get_by_text("Oi, Ana! Eu sou o Mentor.")).to_be_visible()
+    _check_layout(kind, page)
+
+    progress = page.locator("#progress-compact" if kind == "mobile" else "#progress-panel")
+    expect(progress).to_be_visible()
+
+    page.get_by_label("Sua resposta").fill("Sou desenvolvedora backend em São Paulo.")
+    page.get_by_role("button", name="Enviar").click()
+
+    expect(page.get_by_text("Sou desenvolvedora backend em São Paulo.")).to_be_visible()
+    expect(page.get_by_text("Resposta de teste.")).to_be_visible()
+    expect(page.get_by_label("Sua resposta")).to_be_enabled()  # unlocked after the reply
+    expect(page.get_by_label("Sua resposta")).to_be_empty()
+
+    page.reload()
+    expect(page.get_by_text("Resposta de teste.")).to_be_visible()
+
+    page.get_by_role("button", name="Chega por agora").click()
+    expect(page.get_by_role("link", name="Continuar entrevista")).to_be_visible()

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "components/chat.html" import bubble, pending_bubble, progress_compact, progress_panel, composer %}
+{% block title %}{{ _("Entrevista") }} · Mentor{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.4/sse.js"
+        integrity="sha384-QA9wXqexhwzXTuTvuF5QP82pddm3R2hy81UzXi7ioNTqNF2b75hlkkSGjafohhL3"
+        crossorigin="anonymous" defer></script>
+{% endblock %}
+{% block main %}
+{# Full-height chat (D38): the transcript scrolls between the header and the composer. Phone:
+   one column above the bottom dock. md+: chat + checklist side panel below the top menu. #}
+<div class="bg-surface md:bg-canvas">
+  <main class="mx-auto flex h-dvh w-full max-w-md flex-col px-5 pb-24 pt-5 md:h-[calc(100dvh-4.6rem)] md:max-w-6xl md:px-8 md:pb-8 md:pt-8">
+    <div class="flex min-h-0 flex-1 flex-col md:grid md:grid-cols-12 md:gap-6">
+      <section class="flex min-h-0 flex-1 flex-col md:col-span-8 md:rounded-[var(--radius-card)] md:bg-surface md:p-6 md:ring-1 md:ring-moss/50" aria-labelledby="interview-title">
+        <header class="mb-3 flex flex-col gap-3">
+          <h1 id="interview-title" class="text-xl font-semibold md:text-2xl">{{ _("Entrevista") }}</h1>
+          {{ progress_compact(progress) }}
+        </header>
+        {# column-reverse keeps the view anchored at the newest message, without JavaScript. #}
+        <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
+          <div id="transcript" class="flex flex-col gap-3 py-2" aria-live="polite">
+            {% for turn in turns %}{{ bubble(turn.role.value, turn.text, "turn-" ~ turn.id) }}{% endfor %}
+            {% if pending %}{{ pending_bubble(pending) }}{% endif %}
+          </div>
+        </div>
+        {{ composer(disabled=pending is not none, complete=complete) }}
+      </section>
+      <aside class="md:col-span-4 md:overflow-y-auto">{{ progress_panel(progress) }}</aside>
+    </div>
+  </main>
+</div>
+{% endblock %}
