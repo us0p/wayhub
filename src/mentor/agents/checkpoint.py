@@ -1,6 +1,6 @@
 """LangGraph checkpointer (D56): agent state in Postgres, one thread per interview.
 
-The saver is created on first use (its `setup()` creates/migrates its own tables, which
+The saver is created at app startup (its `setup()` creates/migrates its own tables, which
 Alembic ignores) and closed on shutdown. Checkpoints don't cascade from `users`, so account
 deletion must call `delete_threads()` (LGPD, D21). Tests override `get_checkpointer` with an
 in-memory saver.

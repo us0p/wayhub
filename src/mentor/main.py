@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
 from mentor import health
-from mentor.agents.checkpoint import close_checkpointer
+from mentor.agents.checkpoint import close_checkpointer, get_checkpointer
 from mentor.auth import routes as auth_routes
 from mentor.auth.csrf import CSRFMiddleware
 from mentor.auth.deps import ConsentRequiredError, LoginRequiredError
@@ -24,8 +24,11 @@ from mentor.web.redirects import redirect, with_next
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # The saver's setup() runs CREATE INDEX CONCURRENTLY, which waits for every open transaction.
+    # Doing it on first use inside a request would deadlock against that request's own session.
+    await get_checkpointer()
     yield
-    await close_checkpointer()  # opened lazily on first use (D56)
+    await close_checkpointer()
 
 
 def create_app() -> FastAPI:
