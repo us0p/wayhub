@@ -8,7 +8,7 @@
 </article>
 {% else %}
 <article {% if id %}id="{{ id }}"{% endif %} class="mr-auto max-w-[85%] rounded-3xl rounded-bl-lg bg-cream px-4 py-3 text-sm leading-relaxed md:max-w-[75%]">
-  <h3 class="sr-only">{{ _("Mentor") }}</h3>
+  <h3 class="sr-only">{{ _("Mari") }}</h3>
   <p class="whitespace-pre-line">{{ text }}</p>
 </article>
 {% endif %}
@@ -18,9 +18,9 @@
 {% macro pending_bubble(turn) %}
 <article id="pending-{{ turn.id }}" hx-ext="sse" sse-connect="/entrevista/turnos/{{ turn.id }}/resposta" sse-close="done"
          aria-busy="true" class="group mr-auto max-w-[85%] rounded-3xl rounded-bl-lg bg-cream px-4 py-3 text-sm leading-relaxed md:max-w-[75%]">
-  <h3 class="sr-only">{{ _("Mentor") }}</h3>
+  <h3 class="sr-only">{{ _("Mari") }}</h3>
   <p class="whitespace-pre-line empty:hidden" sse-swap="chunk" hx-swap="beforeend show:bottom"></p>
-  <p class="typing text-taupe-strong" aria-label="{{ _('Mentor está digitando') }}"><span>•</span><span>•</span><span>•</span></p>
+  <p class="typing text-taupe-strong" aria-label="{{ _('Mari está digitando') }}"><span>•</span><span>•</span><span>•</span></p>
   <div sse-swap="done" hx-swap="none" hidden></div>
 </article>
 {% endmacro %}
@@ -78,16 +78,24 @@
 </section>
 {% endmacro %}
 
-{% macro composer(disabled=False, complete=False, oob=False) %}
+{% macro composer(disabled=False, complete=False, oob=False, go_to_profile=False) %}
 <div id="composer" {% if oob %}hx-swap-oob="true"{% endif %} class="pt-3">
   {% if complete %}
   <div class="rounded-2xl bg-ink p-5 text-cream">
     <p class="font-semibold">{{ _("Entrevista concluída!") }}</p>
     <p class="mt-1 text-sm text-moss">{{ _("Seu perfil está pronto para revisão.") }}</p>
-    <div class="mt-4 flex flex-wrap gap-3">
-      <a href="/perfil" class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink">{{ _("Revisar perfil") }}</a>
-      <button hx-post="/entrevista/nova" class="rounded-full border border-moss/60 px-5 py-2.5 text-sm font-semibold">{{ _("Continuar conversando") }}</button>
-    </div>
+    <div class="mt-4">{{ details_button("complete") }}</div>
+    {% if go_to_profile %}
+    {# Opens by itself right after the closing message (static/js/app.js). #}
+    <dialog data-auto-open aria-labelledby="finished-title"
+            class="m-auto w-[calc(100%-2.5rem)] max-w-sm rounded-[var(--radius-card)] bg-surface p-6 text-ink shadow-xl backdrop:bg-ink/50">
+      <h2 id="finished-title" class="text-lg font-semibold">{{ _("Sua entrevista terminou!") }}</h2>
+      <p class="mt-2 text-sm leading-relaxed text-taupe-strong">{{ _("Obrigada pela conversa. Reunimos tudo no seu perfil: confira as informações e corrija ou exclua o que estiver errado.") }}</p>
+      <div class="mt-6 flex justify-end">
+        <a href="/perfil" class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Conferir meu perfil") }}</a>
+      </div>
+    </dialog>
+    {% endif %}
   </div>
   {% else %}
   {# No <form>: a click before htmx has loaded does nothing, instead of a native submit
@@ -97,7 +105,7 @@
     <textarea id="texto" name="texto" rows="2" maxlength="4000" {% if disabled %}disabled{% endif %}
               placeholder="{{ _('Escreva sua resposta…') if not disabled else _('Aguarde a resposta…') }}"
               class="min-h-12 flex-1 resize-none rounded-3xl border border-moss bg-surface px-4 py-3 text-sm focus:border-sage-strong focus:outline-none disabled:bg-canvas"></textarea>
-    <button type="button" hx-post="/entrevista/turnos" hx-include="#texto" hx-target="#transcript" hx-swap="beforeend show:bottom"
+    <button type="button" data-send hx-post="/entrevista/turnos" hx-include="#texto" hx-target="#transcript" hx-swap="beforeend show:bottom"
             {% if disabled %}disabled{% endif %}
             class="h-12 shrink-0 rounded-full bg-sage px-5 text-sm font-semibold text-ink shadow transition active:scale-95 disabled:opacity-50">{{ _("Enviar") }}</button>
   </div>
@@ -106,4 +114,15 @@
   </div>
   {% endif %}
 </div>
+{% endmacro %}
+
+{# The one way to add or change facts (D61): back to the interviewer. A finished interview
+   is reopened as a follow-up; one in progress is simply continued. #}
+{% macro details_button(status) %}
+{% set classes = "inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95" %}
+{% if status == "complete" %}
+<button hx-post="/entrevista/nova" class="{{ classes }}">{{ _("Adicionar ou alterar detalhes") }}</button>
+{% else %}
+<a href="/entrevista" class="{{ classes }}">{{ _("Continuar entrevista") if status else _("Começar entrevista") }}</a>
+{% endif %}
 {% endmacro %}

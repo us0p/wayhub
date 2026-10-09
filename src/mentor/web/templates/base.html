@@ -15,6 +15,7 @@
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"
           integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
           crossorigin="anonymous" defer></script>
+  <script src="{{ url_for('static', path='js/app.js') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body{% if csrf_token %} hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
@@ -28,6 +29,16 @@
     </main>
   </div>
   {% endblock %}
+  {# Confirmation modal (replaces the browser's confirm()); driven by static/js/app.js. #}
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"
+          class="m-auto w-[calc(100%-2.5rem)] max-w-sm rounded-[var(--radius-card)] bg-surface p-6 text-ink shadow-xl backdrop:bg-ink/50">
+    <h2 id="confirm-title" class="text-lg font-semibold">{{ _("Tem certeza?") }}</h2>
+    <p data-confirm-message class="mt-2 text-sm leading-relaxed text-taupe-strong"></p>
+    <div class="mt-6 flex flex-wrap justify-end gap-3">
+      <button type="button" data-confirm-no class="rounded-full border border-moss px-5 py-2.5 text-sm font-semibold">{{ _("Cancelar") }}</button>
+      <button type="button" data-confirm-yes class="rounded-full bg-danger px-5 py-2.5 text-sm font-semibold text-white shadow">{{ _("Excluir") }}</button>
+    </div>
+  </dialog>
   {% block bottom_nav %}{{ bottom_nav(active_nav|default("")) }}{% endblock %}
 </body>
 </html>

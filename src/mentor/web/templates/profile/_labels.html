@@ -1,0 +1,13 @@
+{# pt-BR labels for the profile's enums (import with `{% import "profile/_labels.html" as L %}`). #}
+{% set seniority = {
+  "intern": _("Estágio"), "junior": _("Júnior"), "mid": _("Pleno"),
+  "senior": _("Sênior"), "staff": _("Especialista / Staff"), "lead": _("Liderança"),
+} %}
+{% set work_mode = {"remote": _("Remoto"), "hybrid": _("Híbrido"), "onsite": _("Presencial")} %}
+{% set education_status = {
+  "completed": _("Concluído"), "in_progress": _("Em andamento"), "incomplete": _("Incompleto"),
+} %}
+{% set link_kind = {
+  "linkedin": _("LinkedIn"), "github": _("GitHub"), "portfolio": _("Portfólio"), "other": _("Outro"),
+} %}
+{% set yes_no = {"sim": _("Sim"), "nao": _("Não")} %}

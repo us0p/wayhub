@@ -62,7 +62,7 @@ async def test_page_greets_and_loads_the_sse_extension_with_sri(
 
     page = await client.get("/entrevista")
 
-    assert "Oi, Ana!" in page.text
+    assert "Oi Ana, sou a Mari" in page.text
     assert 'aria-current="page"' in page.text  # Entrevista is the active nav item
     assert re.search(r'htmx-ext-sse@[\d.]+/sse\.js"\s+integrity="sha384-', page.text)
     assert 'name="texto"' in page.text
@@ -244,6 +244,12 @@ async def test_completion_shows_the_review_card_and_allows_a_follow_up(
     body = (await client.get(_reply_url(html))).text
 
     assert "Entrevista concluída!" in body
+    assert "data-auto-open" in body and "Sua entrevista terminou!" in body
+    assert 'href="/perfil"' in body  # the modal's button
+    assert "Adicionar ou alterar detalhes" in body and 'id="texto"' not in body
+    reopened = await client.get("/entrevista")  # no way to send more messages
+    assert "data-auto-open" not in reopened.text and 'id="texto"' not in reopened.text
+    assert "Adicionar ou alterar detalhes" in reopened.text
     home = await client.get("/")
     assert "Revisar perfil" in home.text and "100%" in home.text
 
@@ -253,6 +259,32 @@ async def test_completion_shows_the_review_card_and_allows_a_follow_up(
     assert "O que mudou desde a nossa última conversa" in page.text
     count = await db.scalar(select(func.count()).where(Interview.user_id == user.id))
     assert count == 2
+
+
+async def test_a_partial_item_does_not_keep_a_finished_interview_open(
+    client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
+) -> None:
+    token, user = await _start(client, db)
+    _, html = await _post(client, token, "Nunca usei banco de dados, só isso.")
+    fake_ai.chat.script_for(
+        TurnPlan, {"reasoning": "tudo coberto", "brief": "Agradeça.", "done": True}
+    )
+    fake_ai.chat.script("Obrigada, seu perfil está pronto!")
+    checklist: list[dict[str, str]] = [
+        {"item": item.value, "status": "done"}
+        if item is not ChecklistItem.SKILLS
+        else {"item": "skills", "status": "partial", "note": "sem contato com bancos de dados"}
+        for item in ChecklistItem
+    ]
+    fake_ai.chat.script_for(ProfilePatch, {"checklist": checklist})
+
+    body = (await client.get(_reply_url(html))).text
+
+    assert "Entrevista concluída!" in body and "100%" in body
+    interview = await db.scalar(select(Interview).where(Interview.user_id == user.id))
+    assert interview is not None
+    await db.refresh(interview)
+    assert interview.status is InterviewStatus.COMPLETE
 
 
 async def test_deleting_the_account_deletes_the_agent_threads(

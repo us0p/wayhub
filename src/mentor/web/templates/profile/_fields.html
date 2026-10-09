@@ -1,0 +1,79 @@
+{# Form controls for the profile editors. `values` is what to show (the stored fact or the
+   rejected submission), `errors` maps field name → message. Labels wrap their control. #}
+{% set input_class = "mt-1 w-full rounded-2xl border bg-surface px-4 py-3 text-base" %}
+
+{% macro _error(errors, name) %}
+{% if errors.get(name) %}<span role="alert" class="mt-1 block text-sm font-medium text-danger">{{ errors[name] }}</span>{% endif %}
+{% endmacro %}
+
+{# The hint and error sit outside the <label>, so they don't become part of the field's name. #}
+{% macro _note(errors, name, hint) %}
+{% if hint %}<p class="mt-1 text-xs text-taupe-strong">{{ hint }}</p>{% endif %}{{ _error(errors, name) }}
+{% endmacro %}
+
+{% macro text(name, label, values, errors, type="text", hint=None, autocomplete="off", inputmode=None, maxlength=None, step=None) %}
+<div>
+<label class="block text-sm font-medium">{{ label }}
+  <input name="{{ name }}" type="{{ type }}" value="{{ values.get(name, '') }}" autocomplete="{{ autocomplete }}"
+         {% if inputmode %}inputmode="{{ inputmode }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if step %} step="{{ step }}"{% endif %}
+         {% if errors.get(name) %}aria-invalid="true"{% endif %}
+         class="{{ input_class }} {{ 'border-danger' if errors.get(name) else 'border-moss' }}">
+</label>
+{{ _note(errors, name, hint) }}
+</div>
+{% endmacro %}
+
+{% macro textarea(name, label, values, errors, rows=4, hint=None) %}
+<div>
+<label class="block text-sm font-medium">{{ label }}
+  <textarea name="{{ name }}" rows="{{ rows }}" {% if errors.get(name) %}aria-invalid="true"{% endif %}
+            class="{{ input_class }} {{ 'border-danger' if errors.get(name) else 'border-moss' }}">{{ values.get(name, '') }}</textarea>
+</label>
+{{ _note(errors, name, hint) }}
+</div>
+{% endmacro %}
+
+{# options: list of (value, label) #}
+{% macro select(name, label, options, values, errors, blank=None) %}
+<div>
+<label class="block text-sm font-medium">{{ label }}
+  <select name="{{ name }}" {% if errors.get(name) %}aria-invalid="true"{% endif %}
+          class="{{ input_class }} {{ 'border-danger' if errors.get(name) else 'border-moss' }}">
+    {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
+    {% for value, text in options %}<option value="{{ value }}" {% if values.get(name) == value %}selected{% endif %}>{{ text }}</option>{% endfor %}
+  </select>
+</label>
+{{ _note(errors, name, none) }}
+</div>
+{% endmacro %}
+
+{% macro checkbox(name, label, values, value="sim") %}
+<label class="flex items-center gap-3 text-sm font-medium">
+  <input type="checkbox" name="{{ name }}" value="{{ value }}" {% if values.get(name) == value %}checked{% endif %} class="h-5 w-5 rounded border-moss accent-sage-strong">
+  {{ label }}
+</label>
+{% endmacro %}
+
+{% macro checkboxes(name, legend, options, values, errors) %}
+<fieldset>
+  <legend class="text-sm font-medium">{{ legend }}</legend>
+  <div class="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+    {% for value, text in options %}
+    <label class="flex items-center gap-2 text-sm">
+      <input type="checkbox" name="{{ name }}" value="{{ value }}" {% if value in values.get(name, []) %}checked{% endif %} class="h-5 w-5 rounded border-moss accent-sage-strong">
+      {{ text }}
+    </label>
+    {% endfor %}
+  </div>
+  {{ _error(errors, name) }}
+</fieldset>
+{% endmacro %}
+
+{# Save/cancel row. `cancel_url` re-renders the read-only item (or removes a new one). #}
+{% macro actions(cancel_url) %}
+<div class="flex flex-wrap gap-3 pt-2">
+  <button class="rounded-full bg-sage px-6 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Salvar") }}</button>
+  <button type="button" hx-get="{{ cancel_url }}" hx-target="closest article" hx-swap="outerHTML"
+          class="rounded-full border border-moss px-6 py-2.5 text-sm font-semibold">{{ _("Cancelar") }}</button>
+</div>
+{% endmacro %}

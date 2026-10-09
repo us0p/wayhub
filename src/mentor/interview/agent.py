@@ -35,6 +35,7 @@ from mentor.ai.ports import AIOutputError, Effort
 from mentor.auth.models import User
 from mentor.interview import prompts, store
 from mentor.interview.checklist import Progress
+from mentor.interview.models import ChecklistStatus
 from mentor.interview.schemas import ProfilePatch, TurnPlan
 from mentor.profile import service as profile_service
 
@@ -152,6 +153,9 @@ async def apply(state: InterviewState, runtime: Runtime[TurnContext]) -> dict[st
             )
     progress = await store.checklist_progress(ctx.db, ctx.user)
     planned = TurnPlan.model_validate(state.get("plan") or FALLBACK_PLAN.model_dump())
+    if planned.done and not any(i.status is ChecklistStatus.MISSING for i in progress.items):
+        # The interviewer said goodbye: partial leftovers don't keep the interview open.
+        progress = await store.settle_checklist(ctx.db, ctx.user)
     return {"completed": planned.done and progress.all_done}
 
 

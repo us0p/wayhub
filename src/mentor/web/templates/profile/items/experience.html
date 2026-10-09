@@ -1,0 +1,37 @@
+{% from "profile/_card.html" import card, form_card %}
+{% from "profile/_fields.html" import text, textarea, select, checkbox %}
+{% import "profile/_labels.html" as L %}
+
+{% macro view(item, slug) %}
+{% set name = item.title or item.company or _("Experiência") %}
+{% call card(slug, item, name) %}
+  <h3 class="font-semibold">{{ item.title or "—" }}{% if item.company %} <span class="font-normal">{{ _("em") }}</span> {{ item.company }}{% endif %}</h3>
+  <p class="mt-0.5 text-sm text-taupe-strong">
+    {{ item.start_date.strftime("%m/%Y") if item.start_date else "?" }} – {{ _("atual") if item.is_current else (item.end_date.strftime("%m/%Y") if item.end_date else "?") }}
+    {% if item.employment_type %} · {{ item.employment_type }}{% endif %}
+    {% if item.is_technical is not none %} · {{ _("Técnica") if item.is_technical else _("Não técnica") }}{% endif %}
+  </p>
+  {% if item.bullets %}
+  <ul class="mt-3 list-disc space-y-1 pl-5 text-sm leading-relaxed">
+    {% for bullet in item.bullets %}<li>{{ bullet.text }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+{% endcall %}
+{% endmacro %}
+
+{% macro form(item, values, errors, slug) %}
+{% call form_card(slug, item) %}
+  {{ text("title", _("Cargo"), values, errors) }}
+  {{ text("company", _("Empresa"), values, errors) }}
+  <div class="grid grid-cols-2 gap-3">
+    {{ text("start_date", _("Data de início"), values, errors, type="month") }}
+    {{ text("end_date", _("Data de fim"), values, errors, type="month") }}
+  </div>
+  {{ checkbox("is_current", _("Trabalho aqui atualmente"), values) }}
+  <div class="grid gap-3 md:grid-cols-2">
+    {{ text("employment_type", _("Tipo de vínculo"), values, errors, hint=_("Ex.: CLT, PJ, estágio, freelancer")) }}
+    {{ select("is_technical", _("Área técnica?"), L.yes_no.items() | list, values, errors, blank=_("Não informado")) }}
+  </div>
+  {{ textarea("bullets", _("O que você fez"), values, errors, rows=6, hint=_("Uma atividade ou resultado por linha.")) }}
+{% endcall %}
+{% endmacro %}

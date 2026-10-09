@@ -89,7 +89,7 @@ async def test_open_creates_an_interview_with_a_greeting(interviewer: InterviewE
 
     [greeting] = await interviewer.turns(interview)
     assert greeting.role is TurnRole.ASSISTANT
-    assert greeting.text.startswith("Oi, Ana!")
+    assert greeting.text.startswith("Oi Ana, sou a Mari")
     assert await interviewer.open() is interview  # reopening does not greet again
     assert len(await interviewer.turns(interview)) == 1
 
