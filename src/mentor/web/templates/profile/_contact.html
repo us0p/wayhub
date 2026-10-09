@@ -24,11 +24,11 @@
       {{ _row(_("Aceita mudança"), none if profile.open_to_relocation is none else (_("Sim") if profile.open_to_relocation else _("Não"))) }}
     </dl>
     {% else %}
-    <p class="text-sm text-taupe-strong">{{ _("Nenhum dado de contato ainda.") }}</p>
+    <p class="text-sm text-taupe-strong">{{ _("Nenhum dado de contato ainda. Conte para a Mari na entrevista.") }}</p>
     {% endif %}
-    <button hx-get="/perfil/contato/editar" hx-target="closest article" hx-swap="outerHTML"
+    {% if profile %}<button hx-get="/perfil/contato/editar" hx-target="closest article" hx-swap="outerHTML"
             aria-label="{{ _('Editar contato e objetivo') }}"
-            class="shrink-0 rounded-full border border-moss bg-surface px-3 py-1.5 text-sm font-semibold transition active:scale-95">{{ _("Editar") }}</button>
+            class="shrink-0 rounded-full border border-moss bg-surface px-3 py-1.5 text-sm font-semibold transition active:scale-95">{{ _("Editar") }}</button>{% endif %}
   </div>
 </article>
 {% endmacro %}

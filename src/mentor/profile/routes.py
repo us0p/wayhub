@@ -1,5 +1,6 @@
-"""The profile review/edit screen (D15, D60). The page lists what the interview gathered; every
-item is edited in place with htmx: a card swaps itself for a form and back. Validation errors
+"""The profile review/edit screen (D15, D60, D61). The page lists what the interview gathered;
+every item is edited or deleted in place with htmx: a card swaps itself for a form and back.
+Nothing is added by hand: new facts come from talking to the interviewer. Validation errors
 re-render the form with a 200, because htmx only swaps 2xx (and 409/429) responses."""
 
 import uuid
@@ -44,7 +45,7 @@ async def _load(db: DB, user: CurrentUser, kind: Kind, item_id: uuid.UUID) -> Fa
 def _item(
     request: Request,
     kind: Kind,
-    item: Fact | None,
+    item: Fact,
     mode: str,
     values: edit.Values | None = None,
     errors: edit.Errors | None = None,
@@ -96,12 +97,6 @@ async def profile_page(request: Request, user: CurrentUser, db: DB) -> Response:
     )
 
 
-@router.get("/vazio", response_class=HTMLResponse)
-async def nothing(user: CurrentUser) -> Response:
-    """Cancelling a new item's form removes it."""
-    return Response(status_code=200)
-
-
 # Contact and preferences: one row per user, so no id in the URL. Registered before the
 # `/{slug}/...` routes.
 
@@ -125,18 +120,6 @@ async def contact_save(request: Request, user: CurrentUser, db: DB) -> Response:
     profile = await edit.save_contact(db, user, values)
     await db.commit()
     return _contact(request, profile, "view")
-
-
-@router.get("/{slug}/nova", response_class=HTMLResponse)
-async def new_form(request: Request, slug: str, user: CurrentUser) -> Response:
-    return _item(request, _kind(slug), None, "form")
-
-
-@router.post("/{slug}", response_class=HTMLResponse)
-async def create(
-    request: Request, slug: str, user: CurrentUser, db: DB, ai: AIServices
-) -> Response:
-    return await _save(request, _kind(slug), None, user, db, ai)
 
 
 @router.get("/{slug}/{item_id}", response_class=HTMLResponse)
@@ -174,7 +157,7 @@ async def remove(slug: str, item_id: uuid.UUID, user: CurrentUser, db: DB) -> Re
 async def _save(
     request: Request,
     kind: Kind,
-    item: Fact | None,
+    item: Fact,
     user: CurrentUser,
     db: DB,
     ai: AIServices,
@@ -189,5 +172,5 @@ async def _save(
         else:
             await db.commit()
             return _item(request, kind, saved, "view")
-    # Show the rejected form as typed; `item` only supplies the card's id and form URL.
+    # Show the rejected form as typed.
     return _item(request, kind, item, "form", edit.raw_values(form), errors)

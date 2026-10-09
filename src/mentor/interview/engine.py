@@ -87,9 +87,9 @@ class TurnPendingError(Exception):
 
 def greeting(user: User) -> str:
     return _(
-        "Oi, %(name)s! Eu sou o Mentor. Vou te fazer algumas perguntas para montar o seu "
-        "perfil profissional; é só responder do seu jeito. Para começar: o que você faz hoje "
-        "e que tipo de trabalho está buscando?"
+        "Oi %(name)s, sou a Mari e vou ser sua Mentora nessa entrevista. Vou te fazer "
+        "algumas perguntas para montar o seu perfil profissional; é só responder do seu "
+        "jeito. Para começar: o que você faz hoje e que tipo de trabalho está buscando?"
     ) % {"name": user.name.split(" ")[0]}
 
 
