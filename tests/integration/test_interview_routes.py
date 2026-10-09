@@ -244,12 +244,12 @@ async def test_completion_shows_the_review_card_and_allows_a_follow_up(
     body = (await client.get(_reply_url(html))).text
 
     assert "Entrevista concluída!" in body
-    assert 'hx-get="/entrevista/concluida"' in body  # leaves the chat for the profile preview
+    assert "data-auto-open" in body and "Sua entrevista terminou!" in body
+    assert 'href="/perfil"' in body  # the modal's button
     assert "Adicionar ou alterar detalhes" in body and 'id="texto"' not in body
-    leave = await client.get("/entrevista/concluida", headers={"HX-Request": "true"})
-    assert leave.headers["HX-Redirect"] == "/perfil"
     reopened = await client.get("/entrevista")  # no way to send more messages
-    assert 'id="texto"' not in reopened.text and "Adicionar ou alterar detalhes" in reopened.text
+    assert "data-auto-open" not in reopened.text and 'id="texto"' not in reopened.text
+    assert "Adicionar ou alterar detalhes" in reopened.text
     home = await client.get("/")
     assert "Revisar perfil" in home.text and "100%" in home.text
 

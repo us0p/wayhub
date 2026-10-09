@@ -86,8 +86,15 @@
     <p class="mt-1 text-sm text-moss">{{ _("Seu perfil está pronto para revisão.") }}</p>
     <div class="mt-4">{{ details_button("complete") }}</div>
     {% if go_to_profile %}
-    {# Leaves the chat for the profile preview shortly after the closing message. #}
-    <div hx-get="/entrevista/concluida" hx-trigger="load delay:2500ms" hidden></div>
+    {# Opens by itself right after the closing message (static/js/app.js). #}
+    <dialog data-auto-open aria-labelledby="finished-title"
+            class="m-auto w-[calc(100%-2.5rem)] max-w-sm rounded-[var(--radius-card)] bg-surface p-6 text-ink shadow-xl backdrop:bg-ink/50">
+      <h2 id="finished-title" class="text-lg font-semibold">{{ _("Sua entrevista terminou!") }}</h2>
+      <p class="mt-2 text-sm leading-relaxed text-taupe-strong">{{ _("Obrigada pela conversa. Reunimos tudo no seu perfil: confira as informações e corrija ou exclua o que estiver errado.") }}</p>
+      <div class="mt-6 flex justify-end">
+        <a href="/perfil" class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Conferir meu perfil") }}</a>
+      </div>
+    </dialog>
     {% endif %}
   </div>
   {% else %}

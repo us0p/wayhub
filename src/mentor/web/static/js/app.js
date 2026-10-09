@@ -33,3 +33,12 @@ document.addEventListener("click", (event) => {
     pendingConfirm = null;
   }
 });
+
+// A dialog marked data-auto-open opens as soon as htmx swaps it in (e.g. the interview's end).
+document.body.addEventListener("htmx:load", (event) => {
+  const root = event.target;
+  const dialog = root.matches?.("dialog[data-auto-open]")
+    ? root
+    : root.querySelector?.("dialog[data-auto-open]");
+  if (dialog && !dialog.open) dialog.showModal();
+});

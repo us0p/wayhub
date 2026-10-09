@@ -207,3 +207,32 @@ def test_text_interview(viewport_page: tuple[str, Page], base_url: str) -> None:
 
     page.get_by_role("button", name="Chega por agora").click()
     expect(page.get_by_role("link", name="Continuar entrevista")).to_be_visible()
+
+
+def test_finished_interview_opens_a_modal_to_the_profile(
+    viewport_page: tuple[str, Page], base_url: str
+) -> None:
+    """The fake interviewer never ends the interview, so the closing event is stubbed: this
+    checks that the modal in the final SSE event opens by itself and leads to the profile."""
+    _, page = viewport_page
+    done = (
+        '<div id="composer" hx-swap-oob="true"><dialog data-auto-open>'
+        "<h2>Sua entrevista terminou!</h2>"
+        '<a href="/perfil">Conferir meu perfil</a></dialog></div>'
+    )
+    page.route(
+        "**/entrevista/turnos/*/resposta",
+        lambda route: route.fulfill(
+            content_type="text/event-stream", body=f"event: done\ndata: {done}\n\n"
+        ),
+    )
+    _sign_up(page, base_url)
+    page.goto(base_url + "/entrevista")
+    page.wait_for_load_state("load")
+    page.get_by_label("Sua resposta").fill("Era isso.")
+    page.get_by_role("button", name="Enviar").click()
+
+    modal = page.get_by_role("dialog")
+    expect(modal.get_by_text("Sua entrevista terminou!")).to_be_visible()
+    modal.get_by_role("link", name="Conferir meu perfil").click()
+    expect(page.get_by_role("heading", name="Seu perfil")).to_be_visible()

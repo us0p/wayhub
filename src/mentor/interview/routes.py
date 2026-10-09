@@ -183,12 +183,6 @@ async def pause(request: Request, engine: Engine) -> Response:
     return redirect(request, "/")
 
 
-@router.get("/concluida")
-async def finished(request: Request, engine: Engine) -> Response:
-    """Where the chat goes once the interview is complete: the profile preview (D61)."""
-    return redirect(request, "/perfil")
-
-
 @router.post("/nova")
 async def follow_up(request: Request, engine: Engine) -> Response:
     interview = await engine.latest()
