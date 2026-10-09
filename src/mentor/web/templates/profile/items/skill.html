@@ -1,0 +1,24 @@
+{% from "profile/_card.html" import card, form_card %}
+{% from "profile/_fields.html" import text %}
+
+{% macro view(item, slug) %}
+{% call card(slug, item, item.skill.name) %}
+  <h3 class="font-semibold">{{ item.skill.name }}</h3>
+  {% if item.years is not none or item.level %}
+  <p class="mt-0.5 text-sm text-taupe-strong">
+    {% if item.years is not none %}{{ _("%(n)s ano(s)", n="%g" | format(item.years)) }}{% endif %}
+    {% if item.years is not none and item.level %} · {% endif %}{{ item.level or "" }}
+  </p>
+  {% endif %}
+{% endcall %}
+{% endmacro %}
+
+{% macro form(item, values, errors, slug) %}
+{% call form_card(slug, item) %}
+  {{ text("name", _("Habilidade"), values, errors, hint=_("Ex.: Python, Figma, SQL")) }}
+  <div class="grid grid-cols-2 gap-3">
+    {{ text("years", _("Anos de uso"), values, errors, inputmode="decimal") }}
+    {{ text("level", _("Nível"), values, errors, hint=_("Ex.: básico, avançado")) }}
+  </div>
+{% endcall %}
+{% endmacro %}

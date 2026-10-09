@@ -1,0 +1,17 @@
+{% from "profile/_card.html" import card, form_card %}
+{% from "profile/_fields.html" import text, select %}
+{% import "profile/_labels.html" as L %}
+
+{% macro view(item, slug) %}
+{% call card(slug, item, L.link_kind.get(item.kind, item.url)) %}
+  <h3 class="font-semibold">{{ L.link_kind.get(item.kind, item.kind) }}</h3>
+  <p class="mt-0.5 break-all text-sm"><a href="{{ item.url }}" rel="noopener noreferrer nofollow" target="_blank" class="text-sage-strong underline underline-offset-4">{{ item.url }}</a></p>
+{% endcall %}
+{% endmacro %}
+
+{% macro form(item, values, errors, slug) %}
+{% call form_card(slug, item) %}
+  {{ select("kind", _("Tipo"), L.link_kind.items() | list, values, errors) }}
+  {{ text("url", _("Endereço"), values, errors, type="url", inputmode="url", hint=_("Comece com https://")) }}
+{% endcall %}
+{% endmacro %}

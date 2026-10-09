@@ -1,0 +1,3 @@
+{# One item as read-only card (mode=view) or edit form (mode=form), swapped in place by htmx. #}
+{% import "profile/items/" ~ kind.template ~ ".html" as m %}
+{% if mode == "form" %}{{ m.form(item, values, errors, kind.slug) }}{% else %}{{ m.view(item, kind.slug) }}{% endif %}

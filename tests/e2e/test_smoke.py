@@ -70,9 +70,55 @@ def test_sign_up_profile_and_logout(viewport_page: tuple[str, Page], base_url: s
     assert page.evaluate("typeof window.htmx") == "object", "htmx failed to load (SRI/CSP?)"
 
     page.get_by_role("link", name="Perfil").click()
+    expect(page.get_by_role("heading", name="Seu perfil")).to_be_visible()
+    page.get_by_role("link", name="Conta e privacidade").click()
     expect(page.get_by_text("Minutos de entrevista por voz")).to_be_visible()
     page.get_by_role("button", name="Sair").click()
     expect(page.get_by_text("Você saiu da sua conta.")).to_be_visible()
+
+
+def test_edit_profile(viewport_page: tuple[str, Page], base_url: str) -> None:
+    """Review/edit screen (D15): add, edit and delete facts in place, with validation errors."""
+    _, page = viewport_page
+    _sign_up(page, base_url)
+    page.get_by_role("link", name="Perfil").click()
+    page.wait_for_load_state("load")  # htmx is a deferred script
+    expect(page.get_by_text("Nenhuma experiência ainda.")).to_be_visible()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    page.get_by_role("button", name="Adicionar experiência").click()
+    page.get_by_role("button", name="Salvar").click()
+    expect(page.get_by_text("Informe a empresa ou o cargo.")).to_be_visible()  # form stays open
+
+    page.get_by_label("Cargo", exact=True).fill("Desenvolvedora backend")
+    page.get_by_label("Empresa", exact=True).fill("Acme")
+    page.get_by_label("Data de início").fill("2021-03")
+    page.get_by_label("O que você fez").fill("Criou APIs\nReduziu custos")
+    page.get_by_role("button", name="Salvar").click()
+    expect(page.get_by_role("heading", name="Desenvolvedora backend em Acme")).to_be_visible()
+    expect(page.get_by_text("Reduziu custos")).to_be_visible()
+    expect(page.get_by_text("Nenhuma experiência ainda.")).to_be_hidden()
+
+    page.get_by_role("button", name="Editar Desenvolvedora backend").click()
+    page.get_by_label("Empresa", exact=True).fill("Globex")
+    page.get_by_role("button", name="Salvar").click()
+    expect(page.get_by_role("heading", name="Desenvolvedora backend em Globex")).to_be_visible()
+
+    page.get_by_role("button", name="Editar contato e objetivo").click()
+    page.get_by_label("Nome completo").fill("Ana Souza")
+    page.get_by_label("Senioridade").select_option("mid")
+    page.get_by_label("Remoto", exact=True).check()
+    page.get_by_role("button", name="Salvar").click()
+    expect(page.get_by_text("Pleno")).to_be_visible()
+
+    page.reload()  # everything was saved server-side
+    expect(page.get_by_role("heading", name="Desenvolvedora backend em Globex")).to_be_visible()
+    expect(page.get_by_text("Ana Souza")).to_be_visible()
+
+    page.once("dialog", lambda dialog: dialog.accept())
+    page.get_by_role("button", name="Excluir Desenvolvedora backend").click()
+    expect(page.get_by_role("heading", name="Desenvolvedora backend em Globex")).to_be_hidden()
+    expect(page.get_by_text("Nenhuma experiência ainda.")).to_be_visible()
 
 
 def test_delete_account(viewport_page: tuple[str, Page], base_url: str) -> None:

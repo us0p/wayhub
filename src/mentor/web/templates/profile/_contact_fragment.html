@@ -1,0 +1,2 @@
+{% import "profile/_contact.html" as contact %}
+{% if mode == "form" %}{{ contact.form(values, errors) }}{% else %}{{ contact.view(profile) }}{% endif %}

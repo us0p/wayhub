@@ -7,7 +7,7 @@ data.
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from urllib.parse import urlsplit
 
 from langchain_core.embeddings import Embeddings
@@ -91,6 +91,13 @@ async def snapshot(db: AsyncSession, user: User) -> Snapshot:
         links=list(links),
         skills=list(user_skills),
     )
+
+
+def stamps(count: int) -> list[datetime]:
+    """`count` increasing timestamps. Rows inserted in one transaction share the database's
+    `now()`, which would leave bullets in an arbitrary order; explicit stamps keep it stable."""
+    start = datetime.now(UTC)
+    return [start + timedelta(microseconds=i) for i in range(count)]
 
 
 def _month(value: date | None) -> str:
@@ -248,16 +255,17 @@ async def apply_patch(
             continue
         if ep.ref:
             exp_by_ref[ep.ref] = experience
-        for text in ep.new_bullets:
-            if text.strip():
-                bullet = ExperienceBullet(
-                    user_id=user_id,
-                    experience_id=experience.id,
-                    text=text.strip(),
-                    source_turn_id=turn_id,
-                )
-                db.add(bullet)
-                new_bullets.append(bullet)
+        texts = [t.strip() for t in ep.new_bullets if t.strip()]
+        for text, created in zip(texts, stamps(len(texts)), strict=True):
+            bullet = ExperienceBullet(
+                user_id=user_id,
+                experience_id=experience.id,
+                text=text,
+                source_turn_id=turn_id,
+                created_at=created,
+            )
+            db.add(bullet)
+            new_bullets.append(bullet)
     if new_bullets:
         vectors = await embeddings.aembed_documents([b.text for b in new_bullets])
         for bullet, vector in zip(new_bullets, vectors, strict=True):

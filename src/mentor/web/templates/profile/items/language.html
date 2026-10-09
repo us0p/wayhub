@@ -1,0 +1,16 @@
+{% from "profile/_card.html" import card, form_card %}
+{% from "profile/_fields.html" import text %}
+
+{% macro view(item, slug) %}
+{% call card(slug, item, item.language) %}
+  <h3 class="font-semibold">{{ item.language }}</h3>
+  {% if item.level %}<p class="mt-0.5 text-sm text-taupe-strong">{{ item.level }}</p>{% endif %}
+{% endcall %}
+{% endmacro %}
+
+{% macro form(item, values, errors, slug) %}
+{% call form_card(slug, item) %}
+  {{ text("language", _("Idioma"), values, errors) }}
+  {{ text("level", _("Nível"), values, errors, hint=_("Ex.: nativo, fluente, avançado, B2")) }}
+{% endcall %}
+{% endmacro %}

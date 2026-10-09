@@ -7,6 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
 from mentor import health
+from mentor.account import routes as account_routes
 from mentor.agents.checkpoint import close_checkpointer, get_checkpointer
 from mentor.auth import routes as auth_routes
 from mentor.auth.csrf import CSRFMiddleware
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
         app.include_router(auth_routes.dev_router)
     app.include_router(legal_routes.router)
     app.include_router(interview_routes.router)
+    app.include_router(account_routes.router)
     app.include_router(profile_routes.router)
     app.include_router(web_routes.router)
 

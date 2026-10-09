@@ -1,0 +1,60 @@
+{% from "profile/_fields.html" import text, textarea, select, checkboxes, actions %}
+{% import "profile/_labels.html" as L %}
+
+{% macro _row(label, value) %}
+{% if value %}<div class="flex flex-col gap-0.5 md:flex-row md:gap-4"><dt class="text-sm text-taupe-strong md:w-40 md:shrink-0">{{ label }}</dt><dd class="min-w-0 break-words text-sm font-medium">{{ value }}</dd></div>{% endif %}
+{% endmacro %}
+
+{% macro view(profile) %}
+{% set modes = [] %}
+{% if profile %}{% for mode in profile.work_modes %}{% set _ = modes.append(L.work_mode[mode.value]) %}{% endfor %}{% endif %}
+<article id="contact" class="rounded-2xl bg-cream p-4">
+  <div class="flex items-start justify-between gap-3">
+    {% if profile %}
+    <dl class="min-w-0 flex-1 space-y-2">
+      {{ _row(_("Nome"), profile.full_name) }}
+      {{ _row(_("E-mail"), profile.email) }}
+      {{ _row(_("Telefone"), profile.phone) }}
+      {{ _row(_("Localização"), [profile.city, profile.state, profile.country] | select | join(", ")) }}
+      {{ _row(_("Resumo"), profile.headline) }}
+      {{ _row(_("Cargos-alvo"), profile.target_roles | join(", ")) }}
+      {{ _row(_("Senioridade"), L.seniority[profile.seniority.value] if profile.seniority else none) }}
+      {{ _row(_("Modalidade"), modes | join(", ")) }}
+      {{ _row(_("Locais desejados"), profile.desired_locations | join(", ")) }}
+      {{ _row(_("Aceita mudança"), none if profile.open_to_relocation is none else (_("Sim") if profile.open_to_relocation else _("Não"))) }}
+    </dl>
+    {% else %}
+    <p class="text-sm text-taupe-strong">{{ _("Nenhum dado de contato ainda.") }}</p>
+    {% endif %}
+    <button hx-get="/perfil/contato/editar" hx-target="closest article" hx-swap="outerHTML"
+            aria-label="{{ _('Editar contato e objetivo') }}"
+            class="shrink-0 rounded-full border border-moss bg-surface px-3 py-1.5 text-sm font-semibold transition active:scale-95">{{ _("Editar") }}</button>
+  </div>
+</article>
+{% endmacro %}
+
+{% macro form(values, errors) %}
+<article id="contact" class="rounded-2xl bg-cream p-4 ring-2 ring-sage-strong/60">
+  <form hx-post="/perfil/contato" hx-target="closest article" hx-swap="outerHTML" class="space-y-4">
+    {{ text("full_name", _("Nome completo"), values, errors, autocomplete="name") }}
+    <div class="grid gap-3 md:grid-cols-2">
+      {{ text("email", _("E-mail"), values, errors, type="email", autocomplete="email") }}
+      {{ text("phone", _("Telefone"), values, errors, type="tel", autocomplete="tel") }}
+    </div>
+    <div class="grid gap-3 md:grid-cols-3">
+      {{ text("city", _("Cidade"), values, errors) }}
+      {{ text("state", _("Estado"), values, errors) }}
+      {{ text("country", _("País"), values, errors) }}
+    </div>
+    {{ text("headline", _("Resumo profissional"), values, errors, hint=_("Uma frase sobre você, para o topo do currículo.")) }}
+    {{ text("target_roles", _("Cargos-alvo"), values, errors, hint=_("Separe por vírgula. Ex.: Desenvolvedor backend, Engenheiro de dados")) }}
+    <div class="grid gap-3 md:grid-cols-2">
+      {{ select("seniority", _("Senioridade"), L.seniority.items() | list, values, errors, blank=_("Não informada")) }}
+      {{ select("open_to_relocation", _("Aceita mudar de cidade?"), L.yes_no.items() | list, values, errors, blank=_("Não informado")) }}
+    </div>
+    {{ checkboxes("work_modes", _("Modalidade de trabalho"), L.work_mode.items() | list, values, errors) }}
+    {{ text("desired_locations", _("Locais desejados"), values, errors, hint=_("Separe por vírgula.")) }}
+    {{ actions("/perfil/contato") }}
+  </form>
+</article>
+{% endmacro %}

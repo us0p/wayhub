@@ -11,7 +11,7 @@ from .helpers import login_and_consent
 async def test_profile_shows_identity_and_usage(client: AsyncClient) -> None:
     await login_and_consent(client)
 
-    page = await client.get("/perfil")
+    page = await client.get("/conta")
 
     assert page.status_code == 200
     assert "ana@example.com" in page.text

@@ -2,7 +2,7 @@
 {% block title %}{{ _("Excluir conta") }} · Mentor{% endblock %}
 {% block content %}
 <div class="mx-auto max-w-xl">
-  <a href="/perfil" class="text-sm font-medium text-sage-strong underline underline-offset-4">← {{ _("Voltar ao perfil") }}</a>
+  <a href="/conta" class="text-sm font-medium text-sage-strong underline underline-offset-4">← {{ _("Voltar à conta") }}</a>
   <h1 class="mt-4 text-2xl font-semibold md:text-3xl">{{ _("Excluir conta") }}</h1>
   <p class="mt-3 text-sm leading-relaxed">{{ _("Isso apaga imediatamente e de forma definitiva seu perfil, entrevistas, vagas, currículos e histórico de uso. Não é possível desfazer.") }}</p>
   <form hx-post="/conta/excluir" class="mt-6 space-y-4">

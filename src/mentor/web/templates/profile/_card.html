@@ -1,0 +1,29 @@
+{# A read-only profile item with its edit/delete buttons; the body is the macro's caller().
+   `label` names the item for screen readers ("Editar Acme"). #}
+{% macro card(slug, item, label) %}
+<article id="item-{{ item.id }}" class="rounded-2xl bg-cream p-4">
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0 flex-1">{{ caller() }}</div>
+    <div class="flex shrink-0 gap-2 text-sm font-semibold">
+      <button hx-get="/perfil/{{ slug }}/{{ item.id }}/editar" hx-target="closest article" hx-swap="outerHTML"
+              aria-label="{{ _('Editar %(item)s', item=label) }}"
+              class="rounded-full border border-moss bg-surface px-3 py-1.5 transition active:scale-95">{{ _("Editar") }}</button>
+      <button hx-delete="/perfil/{{ slug }}/{{ item.id }}" hx-confirm="{{ _('Excluir este item do seu perfil?') }}"
+              hx-target="closest article" hx-swap="outerHTML"
+              aria-label="{{ _('Excluir %(item)s', item=label) }}"
+              class="rounded-full border border-moss bg-surface px-3 py-1.5 text-danger transition active:scale-95">{{ _("Excluir") }}</button>
+    </div>
+  </div>
+</article>
+{% endmacro %}
+
+{# The edit form of an item (`item` is none for a new one). The body is the macro's caller(). #}
+{% macro form_card(slug, item) %}
+{% from "profile/_fields.html" import actions %}
+<article {% if item %}id="item-{{ item.id }}"{% endif %} class="rounded-2xl bg-cream p-4 ring-2 ring-sage-strong/60">
+  <form hx-post="/perfil/{{ slug }}{% if item %}/{{ item.id }}{% endif %}" hx-target="closest article" hx-swap="outerHTML" class="space-y-4">
+    {{ caller() }}
+    {{ actions("/perfil/" ~ slug ~ "/" ~ item.id if item else "/perfil/vazio") }}
+  </form>
+</article>
+{% endmacro %}

@@ -1,0 +1,26 @@
+{% from "profile/_card.html" import card, form_card %}
+{% from "profile/_fields.html" import text, select %}
+{% import "profile/_labels.html" as L %}
+
+{% macro view(item, slug) %}
+{% call card(slug, item, item.degree or item.institution or _("Formação")) %}
+  <h3 class="font-semibold">{{ item.degree or "—" }}{% if item.field %} <span class="font-normal">{{ _("em") }}</span> {{ item.field }}{% endif %}</h3>
+  <p class="mt-0.5 text-sm text-taupe-strong">
+    {{ item.institution or "?" }} · {{ item.start_year or "?" }} – {{ item.end_year or "?" }}
+    {% if item.status %} · {{ L.education_status[item.status.value] }}{% endif %}
+  </p>
+{% endcall %}
+{% endmacro %}
+
+{% macro form(item, values, errors, slug) %}
+{% call form_card(slug, item) %}
+  {{ text("institution", _("Instituição"), values, errors) }}
+  {{ text("degree", _("Grau ou certificação"), values, errors, hint=_("Ex.: Bacharelado, Tecnólogo, Curso técnico")) }}
+  {{ text("field", _("Curso ou área"), values, errors) }}
+  <div class="grid grid-cols-2 gap-3">
+    {{ text("start_year", _("Ano de início"), values, errors, inputmode="numeric", maxlength=4) }}
+    {{ text("end_year", _("Ano de fim"), values, errors, inputmode="numeric", maxlength=4) }}
+  </div>
+  {{ select("status", _("Situação"), L.education_status.items() | list, values, errors, blank=_("Não informada")) }}
+{% endcall %}
+{% endmacro %}
