@@ -1,80 +1,86 @@
-"""Deterministic in-memory adapters (D24): used by every non-contract test and by offline dev.
+"""Deterministic in-memory adapters (D24, D55): used by every non-contract test and by offline dev.
 
-`FakeLLM` replays a script of replies in order and records every call, so tests can assert on
-what the domain sent. `FakeEmbedder` hashes words into buckets, so texts sharing words get
-similar vectors, which is enough to exercise pgvector queries.
+`FakeChatModels` is a LangChain-compatible chat model factory driven by a script: text calls
+(invoke/stream) consume `script(...)` replies in order; structured calls consume replies
+queued per schema with `script_for(Schema, ...)`, so concurrent calls for different schemas
+never depend on scheduling order. Every call is recorded in `calls`. `FakeEmbeddings` hashes
+words into buckets, so texts sharing words get similar vectors (enough for pgvector tests).
 """
 
 import hashlib
 import math
 import re
-from collections import deque
-from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterable, Sequence
+from collections import defaultdict, deque
+from collections.abc import AsyncIterable, AsyncIterator, Callable, Iterator, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models import BaseChatModel, LanguageModelInput
+from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from langchain_core.prompt_values import PromptValue
+from langchain_core.runnables import Runnable, RunnableLambda
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mentor.ai.bundle import AI
-from mentor.ai.ports import (
-    DEFAULT_LANGUAGE,
-    AIOutputError,
-    Completion,
-    EmbedPurpose,
-    Image,
-    Message,
-    Structured,
-    Transcript,
-    Usage,
+from mentor.ai.ports import DEFAULT_LANGUAGE, AIOutputError, Effort, Transcript
+
+type Reply = (
+    str | BaseModel | dict[str, object] | Exception | Callable[[Sequence[BaseMessage]], "Reply"]
 )
 
-type Reply = str | BaseModel | dict[str, object] | Callable[[Sequence[Message]], Reply]
-
 UNSCRIPTED_REPLY = "Resposta de teste."
-_USAGE = Usage(input_tokens=1, output_tokens=1)
 
 
 @dataclass(frozen=True)
 class FakeCall:
-    method: str
-    messages: tuple[Message, ...]
-    images: tuple[Image, ...] = ()
+    method: str  # "chat" or "structured"
+    messages: tuple[BaseMessage, ...]
     schema: type[BaseModel] | None = None
+    effort: Effort | None = None
 
 
-class FakeLLM:
-    """Scripted LLM (and, through `FakeVision`, Vision). Each call consumes the next reply; a
-    callable reply receives the messages. With the script exhausted, text calls answer
-    `UNSCRIPTED_REPLY` and structured calls raise `AIOutputError` (a test forgot to script it)."""
+def _messages(value: LanguageModelInput) -> list[BaseMessage]:
+    if isinstance(value, PromptValue):
+        return value.to_messages()
+    if isinstance(value, str):
+        return [HumanMessage(content=value)]
+    return [m for m in value if isinstance(m, BaseMessage)]
 
-    def __init__(self, replies: Iterable[Reply] = ()) -> None:
-        self.replies: deque[Reply] = deque(replies)
+
+class FakeScript:
+    def __init__(self) -> None:
+        self.replies: deque[Reply] = deque()
+        self.structured: defaultdict[type[BaseModel], deque[Reply]] = defaultdict(deque)
         self.calls: list[FakeCall] = []
 
-    def script(self, *replies: Reply) -> None:
-        self.replies.extend(replies)
-
-    def _next(self, messages: Sequence[Message]) -> Reply | None:
-        if not self.replies:
-            return None
-        reply = self.replies.popleft()
+    @staticmethod
+    def _resolve(reply: Reply, messages: Sequence[BaseMessage]) -> Reply:
         while callable(reply):
             reply = reply(messages)
+        if isinstance(reply, Exception):
+            raise reply
         return reply
 
-    def _text(self, messages: Sequence[Message]) -> str:
-        reply = self._next(messages)
-        if reply is None:
+    def text(self, messages: Sequence[BaseMessage], effort: Effort | None) -> str:
+        self.calls.append(FakeCall("chat", tuple(messages), effort=effort))
+        if not self.replies:
             return UNSCRIPTED_REPLY
-        if isinstance(reply, BaseModel):
-            return reply.model_dump_json()
-        if isinstance(reply, dict):
-            raise AIOutputError("FakeLLM: a dict reply was scripted for a text call")
+        reply = self._resolve(self.replies.popleft(), messages)
+        if isinstance(reply, BaseModel | dict):
+            raise AIOutputError("FakeChatModels: a structured reply was scripted for a text call")
         return str(reply)
 
-    def _structured[M: BaseModel](self, messages: Sequence[Message], schema: type[M]) -> M:
-        reply = self._next(messages)
-        if reply is None:
-            raise AIOutputError(f"FakeLLM: no scripted reply for {schema.__name__}")
+    def value[M: BaseModel](
+        self, messages: Sequence[BaseMessage], schema: type[M], effort: Effort | None
+    ) -> M:
+        self.calls.append(FakeCall("structured", tuple(messages), schema, effort))
+        queue = self.structured[schema]
+        if not queue:
+            raise AIOutputError(f"FakeChatModels: no scripted reply for {schema.__name__}")
+        reply = self._resolve(queue.popleft(), messages)
         try:
             if isinstance(reply, BaseModel):
                 return schema.model_validate(reply.model_dump())
@@ -82,48 +88,86 @@ class FakeLLM:
                 return schema.model_validate(reply)
             return schema.model_validate_json(str(reply))
         except ValidationError as exc:
-            raise AIOutputError(f"FakeLLM: reply does not match {schema.__name__}") from exc
+            raise AIOutputError(f"FakeChatModels: reply does not match {schema.__name__}") from exc
 
-    async def generate(self, messages: Sequence[Message]) -> Completion:
-        self.calls.append(FakeCall("generate", tuple(messages)))
-        return Completion(text=self._text(messages), usage=_USAGE)
 
-    async def generate_structured[M: BaseModel](
-        self, messages: Sequence[Message], schema: type[M]
-    ) -> Structured[M]:
-        self.calls.append(FakeCall("generate_structured", tuple(messages), schema=schema))
-        return Structured(value=self._structured(messages, schema), usage=_USAGE)
+class FakeChatModel(BaseChatModel):
+    """A LangChain chat model that answers from a `FakeScript`, streaming word by word."""
 
-    async def stream(self, messages: Sequence[Message]) -> AsyncIterator[str]:
-        self.calls.append(FakeCall("stream", tuple(messages)))
-        for chunk in re.findall(r"\S+\s*", self._text(messages)):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    fake_script: FakeScript
+    effort: Effort | None = None
+
+    @property
+    def _llm_type(self) -> str:
+        return "fake"
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        text = self.fake_script.text(messages, self.effort)
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
+
+    def _stream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        for word in re.findall(r"\S+\s*", self.fake_script.text(messages, self.effort)):
+            yield ChatGenerationChunk(message=AIMessageChunk(content=word))
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: AsyncCallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        for chunk in self._stream(messages, stop, None, **kwargs):
             yield chunk
 
-    async def generate_structured_from_images[M: BaseModel](
-        self, messages: Sequence[Message], images: Sequence[Image], schema: type[M]
-    ) -> Structured[M]:
-        self.calls.append(FakeCall("vision", tuple(messages), tuple(images), schema))
-        return Structured(value=self._structured(messages, schema), usage=_USAGE)
+
+class FakeChatModels:
+    """`ChatModels` backed by one script. Script it with `script()` / `script_for()`."""
+
+    def __init__(self) -> None:
+        self.fake_script = FakeScript()
+
+    @property
+    def calls(self) -> list[FakeCall]:
+        return self.fake_script.calls
+
+    def script(self, *replies: Reply) -> None:
+        self.fake_script.replies.extend(replies)
+
+    def script_for(self, schema: type[BaseModel], *replies: Reply) -> None:
+        self.fake_script.structured[schema].extend(replies)
+
+    def chat(self, *, effort: Effort | None = None) -> Runnable[LanguageModelInput, BaseMessage]:
+        return FakeChatModel(fake_script=self.fake_script, effort=effort)
+
+    def structured[M: BaseModel](
+        self, schema: type[M], *, effort: Effort | None = None
+    ) -> Runnable[LanguageModelInput, M]:
+        async def run(value: LanguageModelInput) -> M:
+            return self.fake_script.value(_messages(value), schema, effort)
+
+        return RunnableLambda(run, name=f"fake_structured_{schema.__name__}")
 
 
-@dataclass
-class FakeVision:
-    """Vision port view over a `FakeLLM`, so one script and call log covers both."""
+class FakeEmbeddings(Embeddings):
+    """Bag-of-words hashing embeddings: same words → same buckets → high cosine similarity."""
 
-    llm: FakeLLM
-
-    async def generate_structured[M: BaseModel](
-        self, messages: Sequence[Message], images: Sequence[Image], schema: type[M]
-    ) -> Structured[M]:
-        return await self.llm.generate_structured_from_images(messages, images, schema)
-
-
-@dataclass
-class FakeEmbedder:
-    """Bag-of-words hashing embedder: same words → same buckets → high cosine similarity."""
-
-    dimensions: int = 768
-    calls: list[tuple[tuple[str, ...], EmbedPurpose]] = field(default_factory=list)
+    def __init__(self, dimensions: int = 768) -> None:
+        self.dimensions = dimensions
+        self.calls: list[tuple[str, ...]] = []
 
     def vector(self, text: str) -> list[float]:
         vec = [0.0] * self.dimensions
@@ -134,9 +178,12 @@ class FakeEmbedder:
         norm = math.sqrt(sum(v * v for v in vec))
         return [v / norm for v in vec]
 
-    async def embed(self, texts: Sequence[str], *, purpose: EmbedPurpose) -> list[list[float]]:
-        self.calls.append((tuple(texts), purpose))
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(tuple(texts))
         return [self.vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
 
 
 @dataclass
@@ -180,19 +227,16 @@ class FakeTTS:
 class FakeAI(AI):
     """`AI` bundle typed with the fakes, so tests can script and inspect them."""
 
-    llm: FakeLLM
-    vision: FakeVision
-    embedder: FakeEmbedder
+    chat: FakeChatModels
+    embeddings: FakeEmbeddings
     stt: FakeSTT
     tts: FakeTTS
 
     @classmethod
     def create(cls, dimensions: int = 768) -> "FakeAI":
-        llm = FakeLLM()
         return cls(
-            llm=llm,
-            vision=FakeVision(llm),
-            embedder=FakeEmbedder(dimensions),
+            chat=FakeChatModels(),
+            embeddings=FakeEmbeddings(dimensions),
             stt=FakeSTT(),
             tts=FakeTTS(),
         )

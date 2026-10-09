@@ -2,12 +2,13 @@ import math
 from collections.abc import AsyncIterator
 
 import pytest
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from mentor.ai.adapters.fake import UNSCRIPTED_REPLY, FakeAI, FakeEmbedder
-from mentor.ai.ports import AIOutputError, EmbedPurpose, Image, Message, Role, Transcript
+from mentor.ai.adapters.fake import UNSCRIPTED_REPLY, FakeAI, FakeEmbeddings
+from mentor.ai.ports import AIOutputError, Effort, Transcript
 
-USER = [Message(Role.USER, "Oi")]
+USER = [HumanMessage("Oi")]
 
 
 class Answer(BaseModel):
@@ -24,20 +25,21 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b, strict=True))
 
 
-async def test_llm_replays_script_in_order_and_records_calls(fake_ai: FakeAI) -> None:
-    fake_ai.llm.script("primeira", lambda messages: f"eco: {messages[-1].text}")
+async def test_chat_replays_script_in_order_and_records_calls(fake_ai: FakeAI) -> None:
+    fake_ai.chat.script("primeira", lambda messages: f"eco: {messages[-1].text}")
+    model = fake_ai.chat.chat(effort=Effort.LOW)
 
-    assert (await fake_ai.llm.generate(USER)).text == "primeira"
-    assert (await fake_ai.llm.generate(USER)).text == "eco: Oi"
-    assert (await fake_ai.llm.generate(USER)).text == UNSCRIPTED_REPLY
-    assert [c.method for c in fake_ai.llm.calls] == ["generate"] * 3
-    assert fake_ai.llm.calls[0].messages == tuple(USER)
+    assert (await model.ainvoke(USER)).text == "primeira"
+    assert (await model.ainvoke(USER)).text == "eco: Oi"
+    assert (await model.ainvoke(USER)).text == UNSCRIPTED_REPLY
+    assert [(c.method, c.effort) for c in fake_ai.chat.calls] == [("chat", Effort.LOW)] * 3
+    assert fake_ai.chat.calls[0].messages == tuple(USER)
 
 
-async def test_llm_stream_yields_chunks_that_join_to_the_reply(fake_ai: FakeAI) -> None:
-    fake_ai.llm.script("Qual é o seu nome completo?")
+async def test_chat_streams_word_chunks(fake_ai: FakeAI) -> None:
+    fake_ai.chat.script("Qual é o seu nome completo?")
 
-    chunks = [chunk async for chunk in fake_ai.llm.stream(USER)]
+    chunks = [chunk.text async for chunk in fake_ai.chat.chat().astream(USER)]
 
     assert len(chunks) > 1
     assert "".join(chunks) == "Qual é o seu nome completo?"
@@ -47,53 +49,61 @@ async def test_llm_stream_yields_chunks_that_join_to_the_reply(fake_ai: FakeAI) 
     "reply",
     [Answer(name="Ana", years=3), {"name": "Ana", "years": 3}, '{"name": "Ana", "years": 3}'],
 )
-async def test_llm_structured_accepts_model_dict_or_json(
+async def test_structured_accepts_model_dict_or_json(
     fake_ai: FakeAI, reply: Answer | dict[str, object] | str
 ) -> None:
-    fake_ai.llm.script(reply)
+    fake_ai.chat.script_for(Answer, reply)
 
-    result = await fake_ai.llm.generate_structured(USER, Answer)
+    result = await fake_ai.chat.structured(Answer).ainvoke(USER)
 
-    assert result.value == Answer(name="Ana", years=3)
-    assert fake_ai.llm.calls[0].schema is Answer
+    assert result == Answer(name="Ana", years=3)
+    assert fake_ai.chat.calls[0].schema is Answer
 
 
-async def test_llm_structured_fails_when_unscripted_or_invalid(fake_ai: FakeAI) -> None:
+async def test_structured_replies_are_queued_per_schema(fake_ai: FakeAI) -> None:
+    class Other(BaseModel):
+        ok: bool
+
+    fake_ai.chat.script_for(Answer, {"name": "Ana", "years": 1})
+    fake_ai.chat.script_for(Other, {"ok": True})
+
+    other = await fake_ai.chat.structured(Other).ainvoke(USER)
+    answer = await fake_ai.chat.structured(Answer).ainvoke(USER)
+
+    assert (other.ok, answer.name) == (True, "Ana")
+
+
+async def test_structured_fails_when_unscripted_or_invalid(fake_ai: FakeAI) -> None:
     with pytest.raises(AIOutputError):
-        await fake_ai.llm.generate_structured(USER, Answer)
+        await fake_ai.chat.structured(Answer).ainvoke(USER)
 
-    fake_ai.llm.script({"name": "Ana"})
+    fake_ai.chat.script_for(Answer, {"name": "Ana"})
     with pytest.raises(AIOutputError):
-        await fake_ai.llm.generate_structured(USER, Answer)
+        await fake_ai.chat.structured(Answer).ainvoke(USER)
 
 
-async def test_vision_shares_the_llm_script_and_records_images(fake_ai: FakeAI) -> None:
-    image = Image(data=b"png", mime_type="image/png")
-    fake_ai.llm.script({"name": "Vaga", "years": 5})
+async def test_scripted_exceptions_are_raised(fake_ai: FakeAI) -> None:
+    fake_ai.chat.script(AIOutputError("bloqueado"))
 
-    result = await fake_ai.vision.generate_structured(USER, [image], Answer)
-
-    assert result.value.years == 5
-    assert fake_ai.llm.calls[0].images == (image,)
+    with pytest.raises(AIOutputError, match="bloqueado"):
+        await fake_ai.chat.chat().ainvoke(USER)
 
 
-async def test_embedder_is_deterministic_normalized_and_word_sensitive() -> None:
-    embedder = FakeEmbedder(dimensions=64)
+async def test_embeddings_are_deterministic_normalized_and_word_sensitive() -> None:
+    embeddings = FakeEmbeddings(dimensions=64)
 
-    python, python_again, django, cooking = await embedder.embed(
-        ["Python backend", "python  BACKEND", "Python Django backend", "culinária italiana"],
-        purpose=EmbedPurpose.SIMILARITY,
+    python, python_again, django, cooking = await embeddings.aembed_documents(
+        ["Python backend", "python  BACKEND", "Python Django backend", "culinária italiana"]
     )
 
     assert len(python) == 64
     assert math.isclose(math.sqrt(sum(v * v for v in python)), 1.0)
     assert python == python_again
     assert _cosine(python, django) > _cosine(python, cooking)
-    assert embedder.calls[0][1] is EmbedPurpose.SIMILARITY
 
 
-async def test_embedder_handles_text_without_words() -> None:
-    [vector] = await FakeEmbedder(dimensions=8).embed([" "], purpose=EmbedPurpose.QUERY)
+async def test_embeddings_handle_text_without_words() -> None:
+    vector = await FakeEmbeddings(dimensions=8).aembed_query(" ")
 
     assert math.isclose(sum(v * v for v in vector), 1.0)
 

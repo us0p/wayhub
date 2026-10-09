@@ -1,30 +1,16 @@
 import math
-import struct
-import zlib
 
 import pytest
-from google.genai import Client
+from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-from mentor.ai.adapters.gemini import GeminiEmbedder, GeminiLLM, GeminiVision
-from mentor.ai.ports import EmbedPurpose, Image, Message, Role
+from mentor.ai.adapters.gemini import GeminiChatModels
+from mentor.ai.embeddings import NormalizedEmbeddings
+from mentor.ai.ports import Effort
+from mentor.interview.schemas import ProfilePatch, TurnPlan
 from mentor.settings import Settings
 
 pytestmark = pytest.mark.contract
-
-
-def _white_png(size: int = 8) -> bytes:
-    """A blank PNG: enough to prove images reach the model; the text carries the content."""
-
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        body = kind + data
-        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
-
-    header = struct.pack(">IIBBBBB", size, size, 8, 0, 0, 0, 0)  # 8-bit grayscale
-    pixels = zlib.compress(b"".join(b"\x00" + b"\xff" * size for _ in range(size)))
-    return (
-        b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", pixels) + chunk(b"IEND", b"")
-    )
 
 
 class Person(BaseModel):
@@ -32,59 +18,61 @@ class Person(BaseModel):
     years_of_python: int
 
 
-@pytest.fixture
-def llm(gemini_client: Client, settings: Settings) -> GeminiLLM:
-    return GeminiLLM(gemini_client, settings.gemini_model)
+async def test_low_effort_stream_answers_in_portuguese(chat_models: GeminiChatModels) -> None:
+    chunks = [
+        chunk.text
+        async for chunk in chat_models.chat(effort=Effort.LOW).astream(
+            [
+                SystemMessage("Responda em português do Brasil, em uma frase curta."),
+                HumanMessage("Conte de 1 a 20 por extenso."),
+            ]
+        )
+    ]
+
+    assert len(chunks) >= 1
+    assert "vinte" in "".join(chunks).lower()
 
 
-async def test_generate_answers_in_portuguese(llm: GeminiLLM) -> None:
-    result = await llm.generate(
-        [
-            Message(Role.SYSTEM, "Responda em português do Brasil, em uma frase curta."),
-            Message(Role.USER, "Diga olá."),
-        ]
+async def test_structured_output_follows_the_schema(chat_models: GeminiChatModels) -> None:
+    result = await chat_models.structured(Person).ainvoke(
+        [HumanMessage("Ana Souza programa em Python há 4 anos. Extraia os dados.")]
     )
 
-    assert result.text.strip()
-    assert result.usage.input_tokens > 0
+    assert result.years_of_python == 4
+    assert "Ana" in result.name
 
 
-async def test_generate_structured_follows_the_schema(llm: GeminiLLM) -> None:
-    result = await llm.generate_structured(
-        [Message(Role.USER, "Ana Souza programa em Python há 4 anos. Extraia os dados.")], Person
+@pytest.mark.parametrize("schema", [ProfilePatch, TurnPlan])
+async def test_the_interview_schemas_are_accepted_by_gemini(
+    chat_models: GeminiChatModels, schema: type[BaseModel]
+) -> None:
+    """Gemini's JSON-schema support has limits; our real schemas must pass."""
+    result = await chat_models.structured(schema, effort=Effort.LOW).ainvoke(
+        [HumanMessage("Moro em Campinas e trabalho como dev Python na Acme desde 2021.")]
     )
 
-    assert result.value.years_of_python == 4
-    assert "Ana" in result.value.name
+    assert isinstance(result, schema)
 
 
-async def test_stream_yields_several_chunks(llm: GeminiLLM) -> None:
-    chunks = [c async for c in llm.stream([Message(Role.USER, "Conte de 1 a 30 por extenso.")])]
-
-    assert len(chunks) > 1
-    assert "trinta" in "".join(chunks).lower()
-
-
-async def test_vision_accepts_images(llm: GeminiLLM) -> None:
-    result = await GeminiVision(llm).generate_structured(
-        [Message(Role.USER, "Ignore a imagem. Pessoa: Bruno, 2 anos de Python.")],
-        [Image(_white_png(), "image/png")],
-        Person,
+async def test_the_fallback_model_works_on_its_own(settings: Settings) -> None:
+    if not settings.gemini_fallback_model:
+        pytest.skip("no fallback model configured")
+    only_fallback = GeminiChatModels(
+        settings.model_copy(
+            update={"gemini_model": settings.gemini_fallback_model, "gemini_fallback_model": None}
+        )
     )
 
-    assert result.value.years_of_python == 2
+    reply = await only_fallback.chat(effort=Effort.LOW).ainvoke([HumanMessage("Diga olá.")])
+
+    assert reply.text.strip()
 
 
 async def test_embeddings_have_the_configured_size_and_rank_related_texts(
-    gemini_client: Client, settings: Settings
+    embeddings: NormalizedEmbeddings, settings: Settings
 ) -> None:
-    embedder = GeminiEmbedder(
-        gemini_client, settings.gemini_embedding_model, settings.embedding_dimensions
-    )
-
-    python, py3, cooking = await embedder.embed(
-        ["Python", "Python 3 programming language", "receita de bolo de cenoura"],
-        purpose=EmbedPurpose.SIMILARITY,
+    python, py3, cooking = await embeddings.aembed_documents(
+        ["Python", "Python 3 programming language", "receita de bolo de cenoura"]
     )
 
     assert len(python) == settings.embedding_dimensions

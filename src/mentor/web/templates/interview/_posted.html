@@ -1,0 +1,4 @@
+{% from "components/chat.html" import bubble, pending_bubble, composer %}
+{{ bubble("user", turn.text, "turn-" ~ turn.id) }}
+{{ pending_bubble(turn) }}
+{{ composer(disabled=True, oob=True) }}

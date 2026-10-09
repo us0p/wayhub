@@ -1,18 +1,23 @@
-"""Provider-agnostic AI ports (D2, D45).
+"""AI ports (D2, D45, D55).
 
-Domain code depends only on these protocols and DTOs. Adapters live in `mentor.ai.adapters`
-and are chosen by `mentor.ai.registry` from settings; adding a provider never touches domain
-code.
+Text generation and embeddings use LangChain's standard interfaces: domain code asks a
+`ChatModels` factory for a chat model (or a structured-output model) at a given `Effort` and
+gets a LangChain `Runnable`; embeddings are a LangChain `Embeddings`. Retries and the fallback
+model are already applied by the factory. Speech keeps our own ports, since LangChain has no
+streaming speech abstraction.
 
 Audio contract: STT consumes and TTS produces raw PCM16 little-endian mono audio, at
 `STT_SAMPLE_RATE` and `TTS_SAMPLE_RATE` respectively (no WAV header).
 """
 
-from collections.abc import AsyncIterable, AsyncIterator, Sequence
+from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from langchain_core.language_models import LanguageModelInput
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
 STT_SAMPLE_RATE = 16_000
@@ -20,40 +25,26 @@ TTS_SAMPLE_RATE = 24_000
 DEFAULT_LANGUAGE = "pt-BR"
 
 
-class Role(StrEnum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
+class Effort(StrEnum):
+    """How much the model should reason before answering. Lower = faster first token.
+    Omitted = the provider's default. Adapters map it to their own knob (Gemini: thinking level).
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
-@dataclass(frozen=True)
-class Message:
-    role: Role
-    text: str
+class ChatModels(Protocol):
+    def chat(self, *, effort: Effort | None = None) -> Runnable[LanguageModelInput, BaseMessage]:
+        """A chat model; use `.astream()` for token streaming."""
+        ...
 
-
-@dataclass(frozen=True)
-class Image:
-    data: bytes
-    mime_type: str  # e.g. image/png, image/jpeg, application/pdf
-
-
-@dataclass(frozen=True)
-class Usage:
-    input_tokens: int = 0
-    output_tokens: int = 0
-
-
-@dataclass(frozen=True)
-class Completion:
-    text: str
-    usage: Usage
-
-
-@dataclass(frozen=True)
-class Structured[M: BaseModel]:
-    value: M
-    usage: Usage
+    def structured[M: BaseModel](
+        self, schema: type[M], *, effort: Effort | None = None
+    ) -> Runnable[LanguageModelInput, M]:
+        """A model whose output is validated against `schema` (native JSON schema mode)."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -62,14 +53,8 @@ class Transcript:
     is_final: bool
 
 
-class EmbedPurpose(StrEnum):
-    DOCUMENT = "document"  # stored texts (bullets, requirements)
-    QUERY = "query"  # texts searched against stored documents
-    SIMILARITY = "similarity"  # symmetric comparison (skill normalization)
-
-
 class AIError(Exception):
-    """Base for every AI failure the domain may handle."""
+    """Base for AI failures raised by our own adapters and helpers."""
 
 
 class AIConfigurationError(AIError):
@@ -81,38 +66,7 @@ class AIProviderError(AIError):
 
 
 class AIOutputError(AIError):
-    """The provider answered, but not with usable output (empty, blocked, invalid schema)."""
-
-
-class LLM(Protocol):
-    async def generate(self, messages: Sequence[Message]) -> Completion: ...
-
-    async def generate_structured[M: BaseModel](
-        self, messages: Sequence[Message], schema: type[M]
-    ) -> Structured[M]:
-        """Return output validated against `schema`, or raise `AIOutputError`."""
-        ...
-
-    def stream(self, messages: Sequence[Message]) -> AsyncIterator[str]:
-        """Yield the reply as text chunks as soon as they are generated."""
-        ...
-
-
-class Vision(Protocol):
-    async def generate_structured[M: BaseModel](
-        self, messages: Sequence[Message], images: Sequence[Image], schema: type[M]
-    ) -> Structured[M]:
-        """Like `LLM.generate_structured`, with images (or PDFs) attached to the last turn."""
-        ...
-
-
-class Embedder(Protocol):
-    @property
-    def dimensions(self) -> int: ...
-
-    async def embed(self, texts: Sequence[str], *, purpose: EmbedPurpose) -> list[list[float]]:
-        """One L2-normalized vector of `dimensions` floats per text, in order."""
-        ...
+    """The provider answered, but not with usable output (empty, blocked, invalid)."""
 
 
 class STT(Protocol):

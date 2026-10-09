@@ -1,12 +1,17 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
 from mentor import health
+from mentor.agents.checkpoint import close_checkpointer
 from mentor.auth import routes as auth_routes
 from mentor.auth.csrf import CSRFMiddleware
 from mentor.auth.deps import ConsentRequiredError, LoginRequiredError
+from mentor.interview import routes as interview_routes
 from mentor.legal import routes as legal_routes
 from mentor.profile import routes as profile_routes
 from mentor.quotas.service import QuotaExceededError
@@ -17,9 +22,17 @@ from mentor.web import routes as web_routes
 from mentor.web.redirects import redirect, with_next
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    yield
+    await close_checkpointer()  # opened lazily on first use (D56)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Mentor", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        title="Mentor", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
 
     # Order: last added runs first. Security headers wrap everything.
     app.add_middleware(CSRFMiddleware)
@@ -40,6 +53,7 @@ def create_app() -> FastAPI:
     if settings.is_dev_like:
         app.include_router(auth_routes.dev_router)
     app.include_router(legal_routes.router)
+    app.include_router(interview_routes.router)
     app.include_router(profile_routes.router)
     app.include_router(web_routes.router)
 

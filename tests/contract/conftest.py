@@ -4,10 +4,10 @@ Vertex, GOOGLE_CLOUD_PROJECT plus Application Default Credentials. Missing crede
 the tests instead of failing them."""
 
 import pytest
-from google.genai import Client
 
-from mentor.ai.adapters import gemini
+from mentor.ai.adapters.gemini import GeminiChatModels, make_embeddings
 from mentor.ai.adapters.google_speech import GoogleSTT, GoogleTTS
+from mentor.ai.embeddings import NormalizedEmbeddings
 from mentor.settings import Settings, get_settings
 
 pytestmark = pytest.mark.contract
@@ -18,13 +18,23 @@ def settings() -> Settings:
     return get_settings()
 
 
-@pytest.fixture(scope="session")
-def gemini_client(settings: Settings) -> Client:
+def _require_gemini(settings: Settings) -> None:
     if settings.gemini_backend == "api_key" and not settings.gemini_api_key:
         pytest.skip("GEMINI_API_KEY not set")
     if settings.gemini_backend == "vertex" and not settings.google_cloud_project:
         pytest.skip("GOOGLE_CLOUD_PROJECT not set")
-    return gemini.make_client(settings)
+
+
+@pytest.fixture(scope="session")
+def chat_models(settings: Settings) -> GeminiChatModels:
+    _require_gemini(settings)
+    return GeminiChatModels(settings)
+
+
+@pytest.fixture(scope="session")
+def embeddings(settings: Settings) -> NormalizedEmbeddings:
+    _require_gemini(settings)
+    return make_embeddings(settings)
 
 
 @pytest.fixture(scope="session")

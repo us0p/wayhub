@@ -8,8 +8,13 @@ from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from mentor.agents.checkpoint import get_checkpointer
+from mentor.ai.adapters.fake import FakeAI
+from mentor.ai.registry import get_ai
 from mentor.db import get_session
 from mentor.main import create_app
 from mentor.settings import get_settings
@@ -35,12 +40,23 @@ async def db(engine: Any) -> AsyncIterator[AsyncSession]:
 
 
 @pytest.fixture
-async def client(db: AsyncSession) -> AsyncIterator[AsyncClient]:
+def checkpointer() -> BaseCheckpointSaver[str]:
+    """In-memory LangGraph checkpointer; the Postgres one is covered in test_checkpoint.py."""
+    return InMemorySaver()
+
+
+@pytest.fixture
+async def client(
+    db: AsyncSession, fake_ai: FakeAI, checkpointer: BaseCheckpointSaver[str]
+) -> AsyncIterator[AsyncClient]:
+    """App client on the test transaction, with the test's `fake_ai` and `checkpointer`."""
     app = create_app()
 
     async def _session() -> AsyncIterator[AsyncSession]:
         yield db
 
     app.dependency_overrides[get_session] = _session
+    app.dependency_overrides[get_ai] = lambda: fake_ai
+    app.dependency_overrides[get_checkpointer] = lambda: checkpointer
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

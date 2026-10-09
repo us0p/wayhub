@@ -1,0 +1,109 @@
+{# Interview chat components (D27 styling shared with the M6 voice UI). #}
+
+{% macro bubble(role, text, id=None) %}
+{% if role == "user" %}
+<article {% if id %}id="{{ id }}"{% endif %} class="ml-auto max-w-[85%] rounded-3xl rounded-br-lg bg-ink px-4 py-3 text-sm leading-relaxed text-cream md:max-w-[75%]">
+  <h3 class="sr-only">{{ _("Você") }}</h3>
+  <p class="whitespace-pre-line">{{ text }}</p>
+</article>
+{% else %}
+<article {% if id %}id="{{ id }}"{% endif %} class="mr-auto max-w-[85%] rounded-3xl rounded-bl-lg bg-cream px-4 py-3 text-sm leading-relaxed md:max-w-[75%]">
+  <h3 class="sr-only">{{ _("Mentor") }}</h3>
+  <p class="whitespace-pre-line">{{ text }}</p>
+</article>
+{% endif %}
+{% endmacro %}
+
+{# The agent's bubble while its reply streams in (htmx sse extension). #}
+{% macro pending_bubble(turn) %}
+<article id="pending-{{ turn.id }}" hx-ext="sse" sse-connect="/entrevista/turnos/{{ turn.id }}/resposta" sse-close="done"
+         aria-busy="true" class="group mr-auto max-w-[85%] rounded-3xl rounded-bl-lg bg-cream px-4 py-3 text-sm leading-relaxed md:max-w-[75%]">
+  <h3 class="sr-only">{{ _("Mentor") }}</h3>
+  <p class="whitespace-pre-line empty:hidden" sse-swap="chunk" hx-swap="beforeend show:bottom"></p>
+  <p class="typing text-taupe-strong" aria-label="{{ _('Mentor está digitando') }}"><span>•</span><span>•</span><span>•</span></p>
+  <div sse-swap="done" hx-swap="none" hidden></div>
+</article>
+{% endmacro %}
+
+{% set status_labels = {"done": _("concluído"), "partial": _("parcial"), "missing": _("pendente")} %}
+
+{% macro _status_icon(status) %}
+{% if status == "done" %}
+<svg width="18" height="18" viewBox="0 0 24 24" class="shrink-0 text-sage-strong" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="m7.5 12.5 3 3 6-6.5" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+{% elif status == "partial" %}
+<svg width="18" height="18" viewBox="0 0 24 24" class="shrink-0 text-sage-strong" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+{% else %}
+<svg width="18" height="18" viewBox="0 0 24 24" class="shrink-0 text-taupe-strong" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 3"/></svg>
+{% endif %}
+{% endmacro %}
+
+{% macro _items(progress) %}
+<ul class="flex flex-col gap-2.5 text-sm">
+  {% for state in progress.items %}
+  <li class="flex items-start gap-2.5">
+    {{ _status_icon(state.status.value) }}
+    <span class="min-w-0">
+      <span class="{{ 'text-taupe-strong' if state.status.value == 'missing' else '' }}">{{ state.label }}</span>
+      <span class="sr-only">: {{ status_labels[state.status.value] }}</span>
+      {% if state.note %}<span class="block text-xs text-taupe-strong">{{ state.note }}</span>{% endif %}
+    </span>
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro _bar(percent) %}
+<progress class="meter" max="100" value="{{ percent }}" aria-label="{{ _('Perfil completo') }}">{{ percent }}%</progress>
+{% endmacro %}
+
+{# Mobile: a compact bar that expands into the list. #}
+{% macro progress_compact(progress, oob=False) %}
+<details id="progress-compact" {% if oob %}hx-swap-oob="true"{% endif %} class="rounded-2xl bg-surface px-4 py-3 ring-1 ring-moss/50 md:hidden">
+  <summary class="flex cursor-pointer list-none items-center gap-3 text-sm font-medium">
+    <span>{{ _("Perfil %(p)s%%", p=progress.percent) }}</span>
+    {{ _bar(progress.percent) }}
+    <span class="text-xs text-taupe-strong">{{ _("ver itens") }}</span>
+  </summary>
+  <div class="mt-3 max-h-[40dvh] overflow-y-auto">{{ _items(progress) }}</div>
+</details>
+{% endmacro %}
+
+{# md+: a side panel. #}
+{% macro progress_panel(progress, oob=False) %}
+<section id="progress-panel" {% if oob %}hx-swap-oob="true"{% endif %} aria-labelledby="progress-title" class="hidden rounded-[var(--radius-card)] bg-surface p-6 ring-1 ring-moss/50 md:block">
+  <h2 id="progress-title" class="text-base font-semibold">{{ _("Seu perfil") }}</h2>
+  <div class="mt-3 flex items-center gap-3 text-sm font-medium"><span>{{ progress.percent }}%</span>{{ _bar(progress.percent) }}</div>
+  <div class="mt-5">{{ _items(progress) }}</div>
+  <p class="mt-5 text-xs text-taupe-strong">{{ _("A entrevista termina quando todos os itens estiverem completos.") }}</p>
+</section>
+{% endmacro %}
+
+{% macro composer(disabled=False, complete=False, oob=False) %}
+<div id="composer" {% if oob %}hx-swap-oob="true"{% endif %} class="pt-3">
+  {% if complete %}
+  <div class="rounded-2xl bg-ink p-5 text-cream">
+    <p class="font-semibold">{{ _("Entrevista concluída!") }}</p>
+    <p class="mt-1 text-sm text-moss">{{ _("Seu perfil está pronto para revisão.") }}</p>
+    <div class="mt-4 flex flex-wrap gap-3">
+      <a href="/perfil" class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink">{{ _("Revisar perfil") }}</a>
+      <button hx-post="/entrevista/nova" class="rounded-full border border-moss/60 px-5 py-2.5 text-sm font-semibold">{{ _("Continuar conversando") }}</button>
+    </div>
+  </div>
+  {% else %}
+  {# No <form>: a click before htmx has loaded does nothing, instead of a native submit
+     that reloads the page and loses the message. #}
+  <div class="flex items-end gap-2">
+    <label for="texto" class="sr-only">{{ _("Sua resposta") }}</label>
+    <textarea id="texto" name="texto" rows="2" maxlength="4000" {% if disabled %}disabled{% endif %}
+              placeholder="{{ _('Escreva sua resposta…') if not disabled else _('Aguarde a resposta…') }}"
+              class="min-h-12 flex-1 resize-none rounded-3xl border border-moss bg-surface px-4 py-3 text-sm focus:border-sage-strong focus:outline-none disabled:bg-canvas"></textarea>
+    <button type="button" hx-post="/entrevista/turnos" hx-include="#texto" hx-target="#transcript" hx-swap="beforeend show:bottom"
+            {% if disabled %}disabled{% endif %}
+            class="h-12 shrink-0 rounded-full bg-sage px-5 text-sm font-semibold text-ink shadow transition active:scale-95 disabled:opacity-50">{{ _("Enviar") }}</button>
+  </div>
+  <div class="mt-2 flex justify-end">
+    <button hx-post="/entrevista/pausar" class="text-xs font-medium text-taupe-strong underline underline-offset-4">{{ _("Chega por agora") }}</button>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}

@@ -3,8 +3,9 @@
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, Enum, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,3 +16,8 @@ def uuid_pk() -> Mapped[uuid.UUID]:
 
 def created_at() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+def str_enum[E: StrEnum](enum: type[E], name: str) -> Enum:
+    """A Postgres enum type storing the members' values (not their names)."""
+    return Enum(enum, name=name, values_callable=lambda e: [m.value for m in e])
