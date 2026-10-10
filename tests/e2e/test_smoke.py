@@ -68,7 +68,7 @@ def _seed_profile(email: str) -> None:
         pool.submit(asyncio.run, seed()).result()
 
 
-def _sign_up(page: Page, base_url: str) -> str:
+def _sign_up(page: Page, base_url: str, plan: str | None = None) -> str:
     """Dev login (D42) + consent, as a fresh user each time. Returns the e-mail."""
     email = f"e2e-{uuid.uuid4().hex[:8]}@example.com"
     page.goto(base_url + "/")
@@ -76,6 +76,8 @@ def _sign_up(page: Page, base_url: str) -> str:
     page.get_by_role("link", name="Entrar como usuário de teste").click()
     page.get_by_label("E-mail").fill(email)
     page.get_by_label("Nome (opcional)").fill("Ana Souza")
+    if plan:  # the dev login defaults to the unlimited tester plan
+        page.locator("select[name=plan]").select_option(plan)
     page.get_by_role("button", name="Entrar").click()
     expect(page.get_by_role("heading", name="Antes de começar")).to_be_visible()
     page.get_by_role("checkbox").check()
@@ -245,7 +247,7 @@ def test_voice_mode_starts_and_falls_back_to_text(
     panel come up without console errors (CSP), and ending it returns to the text composer."""
     _, page = viewport_page
 
-    _sign_up(page, base_url)
+    _sign_up(page, base_url, plan="free")  # testers have unlimited voice: no minutes shown
     page.get_by_role("link", name="Entrevista", exact=True).click()
     page.wait_for_load_state("load")
 

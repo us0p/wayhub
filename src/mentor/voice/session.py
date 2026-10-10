@@ -2,19 +2,21 @@
 `InterviewEngine` as the text UI.
 
     mic audio ─→ STT (rotated streams) ─→ end of turn ─→ engine ─→ sentences ─→ TTS ─→ speaker
-                     └ interim text while the agent speaks = barge-in: stop the agent's audio
+                     └ deaf while the agent speaks: its audio is dropped and the STT stream closed
 
 The session is transport-agnostic: it reads `Incoming` items (PCM16 audio at
 `STT_SAMPLE_RATE`, or a `Control`) and writes `VoiceEvent`s and audio (PCM16 at
 `TTS_SAMPLE_RATE`) to a `VoiceOutput`; `mentor.voice.routes` adapts it to a WebSocket.
 
-- Turns: STT final results are gathered until `end_of_turn_seconds` pass without new speech;
+- Turns: STT final results are gathered until a pause long enough passes without new speech
+  (`end_of_turn_seconds` after a finished sentence, longer, `unfinished_turn_seconds`, when the
+  text stops mid-sentence, D71);
   the utterance becomes a user turn (`TurnMode.VOICE`, one interview-turn quota unit). Turns
   are answered one at a time; speech heard meanwhile waits and becomes the next turn.
-- Barge-in stops the agent's audio (and the rest of its sentences), not the generation: the
-  reply is still saved whole, so the transcript and the agent's memory stay consistent. In
-  noise it must not misfire (D67): it takes `barge_in_words` real words (fillers like "hm"
-  don't count), held across interim results for `barge_in_hold_seconds`, or a final result.
+- The session does not listen while the agent speaks (D71): microphone audio is dropped (and
+  not counted as voice seconds) from the moment the agent starts talking until
+  `listen_again_seconds` after its audio ends, and the STT stream is closed meanwhile. So
+  noise, echo and other voices can't interrupt or confuse it; there is no barge-in.
 - Final transcripts made only of fillers or noise ("hm", "ahn") are dropped (D67); Chirp 3's
   confidence is not a real score, so it can't be used to filter.
 - Voice seconds are the audio streamed by the browser (D31), recorded every
@@ -114,18 +116,11 @@ class AgentDone:
 
 
 @dataclass(frozen=True)
-class StopAudio:
-    pass
-
-
-@dataclass(frozen=True)
 class Ended:
     reason: EndReason
 
 
-type VoiceEvent = (
-    Ready | Remaining | UserSpeech | UserTurnSaved | AgentText | AgentDone | StopAudio | Ended
-)
+type VoiceEvent = Ready | Remaining | UserSpeech | UserTurnSaved | AgentText | AgentDone | Ended
 
 
 class VoiceOutput(Protocol):
@@ -153,11 +148,13 @@ class _Stop(Exception):
 
 
 class VoiceSession:
-    end_of_turn_seconds = 0.8  # silence after a final transcript that ends the user's turn
+    # Silence after a final transcript that ends the user's turn: short when the text ends a
+    # sentence, longer when it stops mid-sentence (the person is probably still thinking).
+    end_of_turn_seconds = 1.2
+    unfinished_turn_seconds = 3.0
+    listen_again_seconds = 0.5  # after the agent's audio ends (room echo, playback lag)
     segment_seconds = 270.0  # rotate STT streams before Google's ~5-minute limit (D46)
     usage_flush_seconds = 15.0
-    barge_in_words = 2  # real words the user must say over the agent to interrupt it
-    barge_in_hold_seconds = 0.3  # ...still there in interim results this much later
     # Google's TTS stream aborts after 5 s without input, and the model can take longer than
     # that between two sentences: the stream is closed after this idle time and a new one is
     # opened for the next sentence (D70).
@@ -175,9 +172,8 @@ class VoiceSession:
         self._end_of_turn: asyncio.Task[None] | None = None
         self._sentences: asyncio.Queue[str | None] | None = None  # current reply → TTS
         self._tts: asyncio.Task[None] | None = None
-        self._barged_in = False
         self._speaking_until = 0.0  # monotonic estimate of when the browser stops playing
-        self._barge_in_since: float | None = None  # when qualifying speech over the agent began
+        self._listening = True  # False while the STT stream is closed for the agent's speech
         self._muted = False
         self._streamed = 0.0  # seconds of audio received
         self._recorded = 0  # seconds already recorded as usage
@@ -248,6 +244,12 @@ class VoiceSession:
         async for item in incoming:
             match item:
                 case bytes() if item and not self._muted:
+                    if self._deaf():
+                        if self._listening:  # close the STT stream; it reopens with later audio
+                            self._listening = False
+                            self._audio.put_nowait(None)
+                        continue
+                    self._listening = True
                     self._streamed += len(item) / STT_BYTES_PER_SECOND
                     self._audio.put_nowait(item)
                     if self._allowance is not None and self._streamed >= self._allowance:
@@ -335,21 +337,6 @@ class VoiceSession:
             else:
                 self._cancel_end_of_turn()  # still talking
                 await self.out.event(UserSpeech(" ".join([*self._heard, text]), final=False))
-            if self._interrupts(words, final=transcript.is_final):
-                await self._barge_in()
-
-    def _interrupts(self, words: int, *, final: bool) -> bool:
-        """Is this speech a real interruption of the agent, rather than noise?"""
-        if words < self.barge_in_words or not self._speaking():
-            self._barge_in_since = None
-            return False
-        now = time.monotonic()
-        if self._barge_in_since is None:
-            self._barge_in_since = now
-        held = now - self._barge_in_since >= self.barge_in_hold_seconds
-        if final:
-            self._barge_in_since = None
-        return final or held
 
     def _restart_end_of_turn(self) -> None:
         self._cancel_end_of_turn()
@@ -361,7 +348,8 @@ class VoiceSession:
             self._end_of_turn = None
 
     async def _finish_utterance(self) -> None:
-        await asyncio.sleep(self.end_of_turn_seconds)
+        finished = " ".join(self._heard).rstrip().endswith((".", "!", "?", "…"))
+        await asyncio.sleep(self.end_of_turn_seconds if finished else self.unfinished_turn_seconds)
         text = " ".join(self._heard)
         self._heard.clear()
         self._end_of_turn = None
@@ -400,7 +388,6 @@ class VoiceSession:
             return turn
 
     async def _reply(self, turn: InterviewTurn) -> None:
-        self._barged_in = False
         splitter = SentenceSplitter()
         async with contextlib.aclosing(self.engine.respond(self.interview, turn)) as events:
             async for event in events:
@@ -424,8 +411,6 @@ class VoiceSession:
     # -- text to speech ------------------------------------------------------------------
 
     def _say(self, sentence: str) -> None:
-        if self._barged_in:
-            return
         if self._sentences is None:
             self._sentences = asyncio.Queue()
             self._tts = self._spawn(self._speak(self._sentences, previous=self._tts))
@@ -468,15 +453,8 @@ class VoiceSession:
                 )
                 await self.out.audio(pcm)
 
-    def _speaking(self) -> bool:
-        synthesizing = self._tts is not None and not self._tts.done()
-        return synthesizing or time.monotonic() < self._speaking_until
-
-    async def _barge_in(self) -> None:
-        self._barged_in = True
-        self._barge_in_since = None
+    def _deaf(self) -> bool:
+        """The agent is speaking (or just finished): the microphone is not listened to."""
         if self._tts is not None and not self._tts.done():
-            self._tts.cancel()
-        self._sentences = None
-        self._speaking_until = 0.0
-        await self.out.event(StopAudio())
+            return True
+        return time.monotonic() < self._speaking_until + self.listen_again_seconds

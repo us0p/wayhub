@@ -97,7 +97,7 @@ class GoogleSTT:
             streaming_config=speech_v2.StreamingRecognitionConfig(
                 config=config,
                 streaming_features=speech_v2.StreamingRecognitionFeatures(
-                    interim_results=True,  # live transcript and barge-in
+                    interim_results=True,  # live transcript
                     endpointing_sensitivity=self._endpointing,
                 ),
             ),

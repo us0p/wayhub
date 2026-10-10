@@ -1,5 +1,6 @@
 """The voice interview over its WebSocket (M6), with fake STT/TTS/LLM."""
 
+import asyncio
 import uuid
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
@@ -39,6 +40,8 @@ CHUNK = b"\x00\x00" * 1600  # 100 ms of 16 kHz PCM16
 @pytest.fixture(autouse=True)
 def fast_turns(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(VoiceSession, "end_of_turn_seconds", 0.0)
+    monkeypatch.setattr(VoiceSession, "unfinished_turn_seconds", 0.0)
+    monkeypatch.setattr(VoiceSession, "listen_again_seconds", 0.0)
 
 
 async def _user(client: AsyncClient, db: AsyncSession, **override: int | None) -> User:
@@ -168,87 +171,70 @@ async def _assert_still_speaking(ws: WebSocketClient) -> None:
 
 
 @pytest.mark.usefixtures("agent_keeps_talking")
-async def test_speaking_over_the_agent_stops_its_audio(
-    app: FastAPI,
-    client: AsyncClient,
-    db: AsyncSession,
-    fake_ai: FakeAI,
-    monkeypatch: pytest.MonkeyPatch,
+async def test_the_microphone_is_ignored_while_the_agent_speaks(
+    app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
 ) -> None:
+    """D71: noise or talking over the agent neither interrupts it nor reaches the STT, and
+    isn't counted as voice time."""
     user = await _user(client, db)
-    monkeypatch.setattr(VoiceSession, "barge_in_hold_seconds", 0.0)
-    fake_ai.stt.transcripts = [
-        Transcript("Sou a Ana.", is_final=True),
-        Transcript("espera aí", is_final=False),
-        Transcript("Espera aí, me chamo Ana Souza.", is_final=True),
-    ]
+    fake_ai.stt.transcripts = [Transcript("Sou a Ana.", is_final=True)]
 
     async with _ws(app, client) as ws:
         await _until_agent_speaks(ws)
-        await ws.send_bytes(CHUNK)  # → interim "espera aí" while the agent speaks
-        await ws.receive_until(has_event("stop_audio"))
-        await ws.send_bytes(CHUNK)  # → the correction becomes the next turn
-        received = await ws.receive_until(has_event("agent_done"))
+        for _ in range(3):
+            await ws.send_bytes(CHUNK)  # over the agent
+        await _assert_still_speaking(ws)  # no transcript, no stop_audio, nothing
 
-    assert events(received, "user_turn")[0]["text"] == "Espera aí, me chamo Ana Souza."
-    texts = [t.text for t in await _turns(db, user) if t.role is TurnRole.USER]
-    assert texts[-2:] == ["Sou a Ana.", "Espera aí, me chamo Ana Souza."]
-    # The interrupted reply is still saved whole: the transcript matches the agent's memory.
-    assert sum(t.role is TurnRole.ASSISTANT for t in await _turns(db, user)) == 3
+    assert len(fake_ai.stt.received) == len(CHUNK)  # only what was heard before it spoke
+    assert await _usage(db, user, QuotaKind.VOICE_SECONDS) == 1  # 0.1 s, rounded up
 
 
-@pytest.mark.usefixtures("agent_keeps_talking")
-async def test_one_word_or_fillers_over_the_agent_do_not_interrupt_it(
+async def test_listening_resumes_after_the_agent_finishes(
     app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
 ) -> None:
     await _user(client, db)
     fake_ai.stt.transcripts = [
         Transcript("Sou a Ana.", is_final=True),
-        Transcript("não", is_final=False),  # one word: background chatter, a TV...
-        Transcript("hm ahn", is_final=False),  # fillers don't count as words
+        Transcript("Moro em Santos.", is_final=True),
     ]
 
     async with _ws(app, client) as ws:
-        await _until_agent_speaks(ws)
-        for _ in range(2):
-            await ws.send_bytes(CHUNK)
-            await ws.receive_until(has_event("transcript"))
-            await _assert_still_speaking(ws)
+        await ws.receive()
+        await ws.send_bytes(CHUNK)
+        await ws.receive_until(has_event("agent_done"))
+        await asyncio.sleep(0.05)  # the (tiny) fake audio has "played"
+        await ws.send_bytes(CHUNK)
+        received = await ws.receive_until(has_event("agent_done"))
+
+    assert events(received, "user_turn") == [{"type": "user_turn", "text": "Moro em Santos."}]
 
 
-@pytest.mark.usefixtures("agent_keeps_talking")
-async def test_an_interruption_must_last_unless_it_is_a_final_result(
+async def test_a_sentence_left_unfinished_waits_longer_for_the_rest(
     app: FastAPI,
     client: AsyncClient,
     db: AsyncSession,
     fake_ai: FakeAI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """A pause after "Então, eu tive contato" (no full stop) is thinking, not the end."""
     await _user(client, db)
-    monkeypatch.setattr(VoiceSession, "barge_in_hold_seconds", 0.15)
+    monkeypatch.setattr(VoiceSession, "unfinished_turn_seconds", 0.4)
     fake_ai.stt.transcripts = [
-        Transcript("Sou a Ana.", is_final=True),
-        Transcript("espera aí", is_final=False),  # a short burst: not yet
-        Transcript("espera aí um", is_final=False),  # still talking 0.15 s later: interrupt
+        Transcript("Então, eu tive contato", is_final=True),
+        Transcript("com Java na faculdade.", is_final=True),
     ]
 
     async with _ws(app, client) as ws:
-        await _until_agent_speaks(ws)
+        await ws.receive()
         await ws.send_bytes(CHUNK)
         await ws.receive_until(has_event("transcript"))
-        await _assert_still_speaking(ws)  # also lets the hold time pass
+        await asyncio.sleep(0.1)  # a pause, but shorter than the wait for an unfinished sentence
         await ws.send_bytes(CHUNK)
-        await ws.receive_until(has_event("stop_audio"))
+        received = await ws.receive_until(has_event("agent_done"))
 
-    monkeypatch.setattr(VoiceSession, "barge_in_hold_seconds", 60.0)
-    fake_ai.stt.transcripts = [
-        Transcript("Sou a Ana.", is_final=True),
-        Transcript("Espera, uma correção.", is_final=True),  # final: interrupts at once
+    assert events(received, "user_turn") == [
+        {"type": "user_turn", "text": "Então, eu tive contato com Java na faculdade."}
     ]
-    async with _ws(app, client) as ws:
-        await _until_agent_speaks(ws)
-        await ws.send_bytes(CHUNK)
-        await ws.receive_until(has_event("stop_audio"))
 
 
 async def test_finals_made_only_of_fillers_are_dropped(

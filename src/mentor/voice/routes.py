@@ -33,7 +33,6 @@ from mentor.voice.session import (
     Incoming,
     Ready,
     Remaining,
-    StopAudio,
     UserSpeech,
     UserTurnSaved,
     VoiceEvent,
@@ -75,8 +74,6 @@ def _payload(event: VoiceEvent) -> dict[str, Any]:
         case AgentDone(progress, completed):
             html = templates.get_template("interview/_progress.html").render(progress=progress)
             return {"type": "agent_done", "completed": completed, "progress_html": html}
-        case StopAudio():
-            return {"type": "stop_audio"}
         case Ended(reason):
             return {"type": "end", "reason": reason.value}
 

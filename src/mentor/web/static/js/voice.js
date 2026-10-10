@@ -2,7 +2,7 @@
 //
 // Mic → AudioWorklet (16 kHz PCM16, 100 ms frames) → WebSocket → server pipeline; the server
 // sends back 24 kHz PCM16 audio, played through a gapless AudioContext queue, and JSON events
-// for the live transcript, progress and barge-in (`stop_audio`). When voice ends for any reason
+// for the live transcript and progress. The server ignores the mic while the agent speaks (D71). When voice ends for any reason
 // the page reloads into the text interview (D26), with `?voz=<reason>` for a notice.
 // No inline scripts or styles (CSP, D37); every user-facing string comes from the template (D3).
 
@@ -60,7 +60,7 @@ class VoiceSession {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
-          echoCancellation: true, // keeps the agent's voice from triggering barge-in
+          echoCancellation: true, // keeps the agent's voice out of what the server hears
           noiseSuppression: true,
           autoGainControl: true,
         },
@@ -161,9 +161,6 @@ class VoiceSession {
         this.agentBubble = null;
         this.thinking = false;
         this.swapProgress(event.progress_html);
-        break;
-      case "stop_audio":
-        this.stopAudio();
         break;
       case "end":
         this.finish(event.reason);
