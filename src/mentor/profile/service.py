@@ -8,6 +8,7 @@ data.
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from enum import Enum
 from urllib.parse import urlsplit
 
 from langchain_core.embeddings import Embeddings
@@ -198,6 +199,8 @@ def _fit(model: type[Base], name: str, value: object) -> object:
     """Clip strings (and string list items) to their column's length, so one over-long value
     from the model doesn't fail the whole patch."""
     column_type = sa_inspect(model).columns[name].type
+    if isinstance(value, Enum):  # a StrEnum is a str: slicing it would turn it into plain text
+        return value
     if isinstance(value, str) and (length := getattr(column_type, "length", None)):
         return value[:length]
     if (
