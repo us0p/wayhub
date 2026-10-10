@@ -9,6 +9,7 @@ from google.api_core import exceptions as gexc
 from google.cloud import speech_v2, texttospeech_v1
 
 from mentor.ai.adapters.google_speech import MAX_AUDIO_REQUEST, GoogleSTT, GoogleTTS
+from mentor.ai.errors import describe
 from mentor.ai.ports import STT_SAMPLE_RATE, TTS_SAMPLE_RATE, AIProviderError, Transcript
 
 
@@ -110,6 +111,18 @@ async def test_stt_errors_become_provider_errors() -> None:
 
     with pytest.raises(AIProviderError, match="Speech-to-Text"):
         [_ async for _ in _stt(stream).stream(_aiter(b"\x00\x00"))]
+
+
+async def test_provider_errors_carry_a_loggable_status_detail() -> None:
+    """Debugging a Google failure needs the service, status and Google's status message (D72)."""
+    stream = StubStream([gexc.ServiceUnavailable("The service is currently unavailable.")])
+
+    with pytest.raises(AIProviderError) as raised:
+        [_ async for _ in _stt(stream).stream(_aiter(b"\x00\x00"))]
+
+    text = describe(raised.value)
+    assert "Speech-to-Text ServiceUnavailable http=503" in text
+    assert "The service is currently unavailable." in text
 
 
 def _tts(stream: StubStream) -> GoogleTTS:

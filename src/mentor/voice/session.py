@@ -175,6 +175,7 @@ class VoiceSession:
         self._speaking_until = 0.0  # monotonic estimate of when the browser stops playing
         self._listening = True  # False while the STT stream is closed for the agent's speech
         self._muted = False
+        self._opened_at = time.monotonic()
         self._streamed = 0.0  # seconds of audio received
         self._recorded = 0  # seconds already recorded as usage
         self._allowance: float | None = None  # `_streamed` at which minutes run out
@@ -227,15 +228,22 @@ class VoiceSession:
         assert self._tg is not None
         return self._tg.create_task(self._guarded(coro))
 
-    @staticmethod
-    async def _guarded(coro: Awaitable[None]) -> None:
+    async def _guarded(self, coro: Awaitable[None]) -> None:
         """Unexpected errors end the session (with a text fallback) instead of escaping."""
         try:
             await coro
         except _Stop:
             raise
         except Exception as exc:
-            log.warning("voice session failed: %s", describe(exc))
+            log.warning(
+                "voice session failed in %s after %.0f s (%.0f s of audio, %s, %s): %s",
+                getattr(coro, "__qualname__", "?").removeprefix("VoiceSession."),
+                time.monotonic() - self._opened_at,
+                self._streamed,
+                "agent speaking" if self._deaf() else "listening",
+                "muted" if self._muted else "mic on",
+                describe(exc),
+            )
             raise _Stop(EndReason.FAILURE) from exc
 
     # -- incoming audio and controls -----------------------------------------------------

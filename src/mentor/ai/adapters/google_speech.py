@@ -39,8 +39,18 @@ ENDPOINTING: dict[str, int] = {
 
 
 def _provider_error(service: str, exc: gexc.GoogleAPIError) -> AIProviderError:
+    """Our error for a failed Google call. The detail has the service, the HTTP/gRPC status and
+    Google's own status message (e.g. "The service is currently unavailable"), which describe
+    the service, not the audio or text we sent (D72)."""
     code = getattr(exc, "code", None)
-    return AIProviderError(f"Google {service} error {code or type(exc).__name__}")
+    grpc_code = getattr(getattr(exc, "grpc_status_code", None), "name", None)
+    message = " ".join(str(getattr(exc, "message", "") or "").split())[:200]
+    detail = f"{service} {type(exc).__name__} http={getattr(code, 'value', code)} grpc={grpc_code}"
+    if message:
+        detail += f" msg={message!r}"
+    return AIProviderError(
+        f"Google {service} error {code or type(exc).__name__}", log_detail=detail
+    )
 
 
 class GoogleSTT:

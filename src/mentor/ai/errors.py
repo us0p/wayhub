@@ -2,7 +2,9 @@
 
 Exception messages from providers, LangChain's output parsers and pydantic validation can
 contain the model's output or the user's own words (personal data, LGPD). Logs get the
-exception types and the code locations where they were raised, never the messages.
+exception types and the code locations where they were raised, never the messages. The one
+exception is an explicit `log_detail` attribute (see `AIProviderError`), which an adapter sets
+only with infrastructure status text.
 """
 
 import traceback
@@ -15,6 +17,7 @@ def describe(exc: BaseException, depth: int = 4) -> str:
     while current is not None and len(parts) < depth:
         frames = traceback.extract_tb(current.__traceback__)
         where = f"@{frames[-1].filename.rsplit('/', 1)[-1]}:{frames[-1].lineno}" if frames else ""
-        parts.append(f"{type(current).__name__}{where}")
+        detail = getattr(current, "log_detail", None)
+        parts.append(f"{type(current).__name__}{where}" + (f" [{detail}]" if detail else ""))
         current = current.__cause__ or current.__context__
     return " <- ".join(parts)

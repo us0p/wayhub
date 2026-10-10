@@ -394,10 +394,16 @@ async def test_daily_turn_quota_ends_voice_mode(
 
 
 async def test_speech_recognition_failure_falls_back_to_text(
-    app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
+    app: FastAPI,
+    client: AsyncClient,
+    db: AsyncSession,
+    fake_ai: FakeAI,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     await _user(client, db)
-    fake_ai.stt.transcripts = [AIProviderError("Google Speech-to-Text error 503")]
+    fake_ai.stt.transcripts = [
+        AIProviderError("Google Speech-to-Text error 503", log_detail="STT ServiceUnavailable")
+    ]
 
     async with _ws(app, client) as ws:
         await ws.receive()
@@ -405,6 +411,9 @@ async def test_speech_recognition_failure_falls_back_to_text(
         received = await ws.receive_until(has_event("end"))
 
     assert events(received, "end") == [{"type": "end", "reason": "failure"}]
+    failure = next(r.getMessage() for r in caplog.records if "voice session failed" in r.message)
+    assert "failed in _listen after" in failure and "listening, mic on" in failure
+    assert "[STT ServiceUnavailable]" in failure
 
 
 async def test_speech_synthesis_failure_falls_back_and_keeps_the_reply(

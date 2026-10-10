@@ -62,7 +62,15 @@ class AIConfigurationError(AIError):
 
 
 class AIProviderError(AIError):
-    """The provider failed or could not be reached (network, quota, 5xx...)."""
+    """The provider failed or could not be reached (network, quota, 5xx...).
+
+    `log_detail` is an optional description that is safe to log (D72): only set it from
+    infrastructure status text (service, gRPC/HTTP code, the service's status message), never
+    from anything that could echo the user's words or the model's output."""
+
+    def __init__(self, message: str = "", *, log_detail: str | None = None) -> None:
+        super().__init__(message)
+        self.log_detail = log_detail
 
 
 class AIOutputError(AIError):
