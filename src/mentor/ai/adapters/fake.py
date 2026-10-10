@@ -7,6 +7,7 @@ never depend on scheduling order. Every call is recorded in `calls`. `FakeEmbedd
 words into buckets, so texts sharing words get similar vectors (enough for pgvector tests).
 """
 
+import asyncio
 import hashlib
 import math
 import re
@@ -98,6 +99,7 @@ class FakeChatModel(BaseChatModel):
 
     fake_script: FakeScript
     effort: Effort | None = None
+    word_delay: float = 0.0  # seconds between streamed words (to simulate a slow model)
 
     @property
     def _llm_type(self) -> str:
@@ -131,6 +133,8 @@ class FakeChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         for chunk in self._stream(messages, stop, None, **kwargs):
+            if self.word_delay:
+                await asyncio.sleep(self.word_delay)
             yield chunk
 
 
@@ -139,6 +143,7 @@ class FakeChatModels:
 
     def __init__(self) -> None:
         self.fake_script = FakeScript()
+        self.word_delay = 0.0  # see FakeChatModel.word_delay
 
     @property
     def calls(self) -> list[FakeCall]:
@@ -151,7 +156,9 @@ class FakeChatModels:
         self.fake_script.structured[schema].extend(replies)
 
     def chat(self, *, effort: Effort | None = None) -> Runnable[LanguageModelInput, BaseMessage]:
-        return FakeChatModel(fake_script=self.fake_script, effort=effort)
+        return FakeChatModel(
+            fake_script=self.fake_script, effort=effort, word_delay=self.word_delay
+        )
 
     def structured[M: BaseModel](
         self, schema: type[M], *, effort: Effort | None = None

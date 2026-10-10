@@ -273,6 +273,41 @@ async def test_finals_made_only_of_fillers_are_dropped(
     assert texts == ["Sou a Ana."]
 
 
+async def test_a_pause_between_sentences_opens_a_new_speech_stream(
+    app: FastAPI,
+    client: AsyncClient,
+    db: AsyncSession,
+    fake_ai: FakeAI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Google's TTS aborts a stream that gets no text for 5 s (D70); a slow model between
+    two sentences must not cut the agent's voice off."""
+    await _user(client, db)
+    monkeypatch.setattr(VoiceSession, "tts_idle_seconds", 0.1)
+    streams: list[list[str]] = []
+
+    async def recording_tts(
+        text: AsyncIterable[str], *, voice: str | None = None
+    ) -> AsyncIterator[bytes]:
+        texts: list[str] = []
+        streams.append(texts)
+        async for chunk in text:
+            texts.append(chunk)
+            yield b"\x00\x00" * 100
+
+    monkeypatch.setattr(fake_ai.tts, "stream", recording_tts)
+    fake_ai.chat.word_delay = 0.15  # a slow model: ~0.3 s from one sentence to the next
+    fake_ai.stt.transcripts = [Transcript("Oi.", is_final=True)]
+    fake_ai.chat.script("Primeira frase. Segunda frase.")
+
+    async with _ws(app, client) as ws:
+        await ws.receive()
+        await ws.send_bytes(CHUNK)
+        await ws.receive_until(has_event("agent_done"))
+
+    assert streams == [["Primeira frase."], ["Segunda frase."]]  # two streams, nothing lost
+
+
 async def test_speech_streams_are_rotated(
     app: FastAPI,
     client: AsyncClient,

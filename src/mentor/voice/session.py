@@ -158,6 +158,10 @@ class VoiceSession:
     usage_flush_seconds = 15.0
     barge_in_words = 2  # real words the user must say over the agent to interrupt it
     barge_in_hold_seconds = 0.3  # ...still there in interim results this much later
+    # Google's TTS stream aborts after 5 s without input, and the model can take longer than
+    # that between two sentences: the stream is closed after this idle time and a new one is
+    # opened for the next sentence (D70).
+    tts_idle_seconds = 3.0
 
     def __init__(self, engine: InterviewEngine, interview: Interview, out: VoiceOutput) -> None:
         self.engine = engine
@@ -439,14 +443,30 @@ class VoiceSession:
         if previous is not None:  # never interleave two replies' audio
             await asyncio.wait({previous})
 
-        async def texts() -> AsyncIterator[str]:
-            while (sentence := await sentences.get()) is not None:
+        finished = False
+
+        async def texts(first: str) -> AsyncIterator[str]:
+            nonlocal finished
+            yield first
+            while True:
+                try:
+                    sentence = await asyncio.wait_for(sentences.get(), self.tts_idle_seconds)
+                except TimeoutError:
+                    return  # idle: end this TTS stream; the next sentence opens another
+                if sentence is None:
+                    finished = True
+                    return
                 yield sentence
 
-        async for pcm in self.engine.ai.tts.stream(texts()):
-            now = time.monotonic()
-            self._speaking_until = max(now, self._speaking_until) + len(pcm) / TTS_BYTES_PER_SECOND
-            await self.out.audio(pcm)
+        while not finished:
+            if (first := await sentences.get()) is None:
+                return
+            async for pcm in self.engine.ai.tts.stream(texts(first)):
+                now = time.monotonic()
+                self._speaking_until = (
+                    max(now, self._speaking_until) + len(pcm) / TTS_BYTES_PER_SECOND
+                )
+                await self.out.audio(pcm)
 
     def _speaking(self) -> bool:
         synthesizing = self._tts is not None and not self._tts.done()
