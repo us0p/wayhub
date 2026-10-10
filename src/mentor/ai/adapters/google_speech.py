@@ -3,11 +3,14 @@
 Credentials come from Application Default Credentials. The gRPC clients are created lazily on
 first use, so building the registry never needs credentials (tests, text-only flows).
 
+STT denoises the audio before recognition unless `denoise=False` (`GOOGLE_STT_DENOISE`, D67).
+
 Not handled here: Speech v2 caps a stream at about 5 minutes; the voice pipeline (M6) rotates
 streams by ending `audio` and starting a new `stream()` call.
 """
 
 from collections.abc import AsyncIterable, AsyncIterator
+from typing import Literal
 
 from google.api_core import exceptions as gexc
 from google.api_core.client_options import ClientOptions
@@ -23,6 +26,17 @@ from mentor.ai.ports import (
 
 MAX_AUDIO_REQUEST = 15_360  # bytes per StreamingRecognizeRequest (~0.5 s at 16 kHz)
 
+# How much silence Chirp 3 waits for before finalizing a result (D69): `standard` waits to be
+# sure the utterance is complete; `short` suits single sentences; `supershort` finalizes as soon
+# as speech ends (lowest latency, may cut off a pause mid-sentence).
+type Endpointing = Literal["standard", "short", "supershort"]
+_Sensitivity = speech_v2.StreamingRecognitionFeatures.EndpointingSensitivity
+ENDPOINTING: dict[str, int] = {
+    "standard": _Sensitivity.ENDPOINTING_SENSITIVITY_STANDARD,
+    "short": _Sensitivity.ENDPOINTING_SENSITIVITY_SHORT,
+    "supershort": _Sensitivity.ENDPOINTING_SENSITIVITY_SUPERSHORT,
+}
+
 
 def _provider_error(service: str, exc: gexc.GoogleAPIError) -> AIProviderError:
     code = getattr(exc, "code", None)
@@ -36,12 +50,17 @@ class GoogleSTT:
         location: str,
         model: str,
         client: speech_v2.SpeechAsyncClient | None = None,
+        *,
+        denoise: bool = True,
+        endpointing: Endpointing = "short",
     ) -> None:
         self._recognizer = f"projects/{project}/locations/{location}/recognizers/_"
         self._project = project
         self._location = location
         self._model = model
         self._client = client
+        self._denoise = denoise
+        self._endpointing = ENDPOINTING[endpointing]
 
     def _get_client(self) -> speech_v2.SpeechAsyncClient:
         if self._client is None:
@@ -65,12 +84,22 @@ class GoogleSTT:
             language_codes=[language],
             model=self._model,
             features=speech_v2.RecognitionFeatures(enable_automatic_punctuation=True),
+            # Removes background music and noise (rain, traffic); not other people's voices.
+            # The SNR threshold is deprecated on Chirp 3 and must stay 0 (D67).
+            denoiser_config=(
+                speech_v2.DenoiserConfig(denoise_audio=True, snr_threshold=0.0)
+                if self._denoise
+                else None
+            ),
         )
         return speech_v2.StreamingRecognizeRequest(
             recognizer=self._recognizer,
             streaming_config=speech_v2.StreamingRecognitionConfig(
                 config=config,
-                streaming_features=speech_v2.StreamingRecognitionFeatures(interim_results=True),
+                streaming_features=speech_v2.StreamingRecognitionFeatures(
+                    interim_results=True,  # live transcript and barge-in
+                    endpointing_sensitivity=self._endpointing,
+                ),
             ),
         )
 

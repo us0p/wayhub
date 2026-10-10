@@ -53,7 +53,13 @@ def cloud_project(settings: Settings) -> str:
 
 @pytest.fixture
 def stt(settings: Settings, cloud_project: str) -> GoogleSTT:
-    return GoogleSTT(cloud_project, settings.google_stt_location, settings.google_stt_model)
+    return GoogleSTT(
+        cloud_project,
+        settings.google_stt_location,
+        settings.google_stt_model,
+        denoise=settings.google_stt_denoise,
+        endpointing=settings.google_stt_endpointing,
+    )
 
 
 @pytest.fixture

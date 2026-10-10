@@ -100,8 +100,10 @@ async def _turn_of(engine: InterviewEngine, turn_id: uuid.UUID) -> tuple[Intervi
 
 
 @router.get("", response_class=HTMLResponse)
-async def interview_page(request: Request, engine: Engine) -> Response:
+async def interview_page(request: Request, engine: Engine, voz: str | None = None) -> Response:
+    """`voz` is the reason a voice session ended (`EndReason`), shown as a notice (D26, D31)."""
     interview = await engine.open()
+    voice = await quotas.status(engine.db, engine.user, QuotaKind.VOICE_SECONDS)
     return templates.TemplateResponse(
         request,
         "interview/interview.html",
@@ -112,6 +114,8 @@ async def interview_page(request: Request, engine: Engine) -> Response:
             "pending": await engine.pending_turn(interview),
             "progress": await engine.progress(),
             "complete": interview.status is InterviewStatus.COMPLETE,
+            "voice_remaining": voice.remaining,
+            "voice_notice": voz,
         },
     )
 

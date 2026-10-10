@@ -48,9 +48,11 @@ def _stt_response(*results: tuple[str, bool]) -> speech_v2.StreamingRecognizeRes
     )
 
 
-def _stt(stream: StubStream) -> GoogleSTT:
+def _stt(stream: StubStream, *, denoise: bool = True, endpointing: Any = "short") -> GoogleSTT:
     client = cast(speech_v2.SpeechAsyncClient, SimpleNamespace(streaming_recognize=stream))
-    return GoogleSTT("proj", "us", "chirp_3", client=client)
+    return GoogleSTT(
+        "proj", "us", "chirp_3", client=client, denoise=denoise, endpointing=endpointing
+    )
 
 
 async def test_stt_sends_config_then_split_audio() -> None:
@@ -66,8 +68,31 @@ async def test_stt_sends_config_then_split_audio() -> None:
     assert list(config.language_codes) == ["en-US"]
     assert config.explicit_decoding_config.sample_rate_hertz == STT_SAMPLE_RATE
     assert first.streaming_config.streaming_features.interim_results
+    assert config.denoiser_config.denoise_audio
+    assert config.denoiser_config.snr_threshold == 0.0  # deprecated on Chirp 3
+    sensitivity = speech_v2.StreamingRecognitionFeatures.EndpointingSensitivity
+    features = first.streaming_config.streaming_features
+    assert features.endpointing_sensitivity == sensitivity.ENDPOINTING_SENSITIVITY_SHORT
     assert [len(r.audio) for r in rest] == [MAX_AUDIO_REQUEST, 10, 1]
     assert b"".join(r.audio for r in rest) == audio + b"\x02"
+
+
+async def test_stt_denoiser_can_be_turned_off() -> None:
+    stream = StubStream([])
+
+    [_ async for _ in _stt(stream, denoise=False).stream(_aiter(b"\x00\x00"))]
+
+    assert "denoiser_config" not in stream.requests[0].streaming_config.config
+
+
+async def test_stt_endpointing_is_configurable() -> None:
+    stream = StubStream([])
+
+    [_ async for _ in _stt(stream, endpointing="supershort").stream(_aiter(b"\x00\x00"))]
+
+    features = stream.requests[0].streaming_config.streaming_features
+    sensitivity = speech_v2.StreamingRecognitionFeatures.EndpointingSensitivity
+    assert features.endpointing_sensitivity == sensitivity.ENDPOINTING_SENSITIVITY_SUPERSHORT
 
 
 async def test_stt_maps_interim_and_final_results_and_skips_empty() -> None:

@@ -14,7 +14,8 @@
 | 3. AI ports + adapters + fakes | Done — branch `feat/m3-ai-ports` |
 | 4. Text interview | Done — branch `feat/m4-text-interview` (stacked on M3); reworked as a LangGraph agent (D54–D57) |
 | 5. Review/edit profile | Done — branch `feat/m5-profile-review` (D60, D61) |
-| 6–10 | Not started |
+| 6. Voice interview | Done — branch `feat/m6-voice-interview` (D62–D68) |
+| 7–10 | Not started |
 
 ## Context
 Mentor Phase 1 (see `SCOPE.md`) is a candidate-focused career tool. This MVP delivers:
@@ -209,6 +210,17 @@ Each user turn:
 10. **Prod deploy**: compose.prod.yml + Caddy on the VPS/domain, Google OAuth prod redirect, backups (pg_dump cron),
     `.github/workflows/deploy.yml` (GHCR push + SSH deploy + migrations; secrets: `VPS_HOST`, `VPS_USER`,
     `VPS_SSH_KEY`, app env on the VPS only). Recommend branch protection on `main` requiring CI.
+
+## Possible improvements (not scheduled)
+- **Voice: neural noise suppression in the browser.** Run RNNoise (WebAssembly, ~100 KB) inside
+  the capture AudioWorklet before downsampling; much better than the browser's built-in filter on
+  sudden noise (DeepFilterNet is better still but heavy for phones). Vendored `.wasm` served from
+  `'self'`; may need `'wasm-unsafe-eval'` in the CSP. Consider if testers find D67/D68 not enough.
+- **Voice: speech detection (VAD) in the browser.** Silero VAD (ONNX via onnxruntime-web, a few
+  MB loaded only in voice mode) sends audio only while someone speaks, with ~300 ms of pre-roll so
+  the first word isn't clipped. Noise never reaches STT (no phantom transcripts or false barge-ins)
+  and voice seconds would count speech only, not silence (D31 cost). Trade-off: end-of-turn must
+  then be signalled by the client ("speech ended"), since the server no longer hears the silence.
 
 ## Verification
 - `docker compose run --rm app pytest` — unit + integration with fake adapters (DB via the compose Postgres).

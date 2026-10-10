@@ -54,11 +54,35 @@ def build_ai(settings: Settings) -> AI:
                 settings.google_cloud_project,
                 settings.google_stt_location,
                 settings.google_stt_model,
+                denoise=settings.google_stt_denoise,
+                endpointing=settings.google_stt_endpointing,
             )
         if settings.ai_tts == "google":
             tts = google_speech.GoogleTTS(settings.google_tts_voice)
 
     return AI(chat=chat, embeddings=embeddings, stt=stt, tts=tts)
+
+
+def check_google_credentials(settings: Settings) -> None:
+    """Speech-to-Text, Text-to-Speech and Vertex AI authenticate with Application Default
+    Credentials (D46). Raise `AIConfigurationError` at startup if they're needed but missing,
+    instead of failing on a user's first voice turn (D69)."""
+    needs_adc = "google" in (settings.ai_stt, settings.ai_tts) or (
+        settings.uses_gemini and settings.gemini_backend == "vertex"
+    )
+    if not needs_adc:
+        return
+    import google.auth
+    from google.auth.exceptions import DefaultCredentialsError
+
+    try:
+        google.auth.default()
+    except DefaultCredentialsError as exc:
+        raise AIConfigurationError(
+            "Google Application Default Credentials are missing: set "
+            "GOOGLE_APPLICATION_CREDENTIALS to a key file or run "
+            "`gcloud auth application-default login`"
+        ) from exc
 
 
 @lru_cache

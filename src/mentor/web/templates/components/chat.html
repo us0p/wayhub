@@ -101,6 +101,12 @@
   {# No <form>: a click before htmx has loaded does nothing, instead of a native submit
      that reloads the page and loses the message. #}
   <div class="flex items-end gap-2">
+    {# Voice mode (M6): shown by voice.js only when the browser supports it (`voice-ok` on <html>). #}
+    <button type="button" data-voice-start {% if disabled %}disabled{% endif %}
+            aria-label="{{ _('Conversar por voz') }}" title="{{ _('Conversar por voz') }}"
+            class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full border border-moss bg-surface text-ink transition active:scale-95 disabled:opacity-50 [.voice-ok_&]:inline-flex">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
     <label for="texto" class="sr-only">{{ _("Sua resposta") }}</label>
     <textarea id="texto" name="texto" rows="2" maxlength="4000" {% if disabled %}disabled{% endif %}
               placeholder="{{ _('Escreva sua resposta…') if not disabled else _('Aguarde a resposta…') }}"
@@ -125,4 +131,49 @@
 {% else %}
 <a href="/entrevista" class="{{ classes }}">{{ _("Continuar entrevista") if status else _("Começar entrevista") }}</a>
 {% endif %}
+{% endmacro %}
+
+{# Voice mode controls (D27): live status, mic level, minutes left, mute and end. Hidden until
+   voice.js starts a session; the labels live here so every string goes through _() (D3). #}
+{% macro voice_panel(remaining) %}
+<section id="voice-panel" aria-label="{{ _('Conversa por voz') }}" class="hidden pt-3"
+         data-exhausted="{{ 'true' if remaining is not none and remaining <= 0 else 'false' }}"
+         data-label-connecting="{{ _('Conectando…') }}"
+         data-label-listening="{{ _('Ouvindo…') }}"
+         data-label-thinking="{{ _('Pensando…') }}"
+         data-label-speaking="{{ _('Mari está falando…') }}"
+         data-label-muted="{{ _('Microfone silenciado') }}"
+         data-remaining="{{ _('%(n)s min de voz restantes', n='{n}') }}">
+  <div class="rounded-3xl bg-ink p-4 text-cream md:p-5">
+    <div class="flex items-center justify-between gap-3">
+      <p id="voice-status" class="text-sm font-semibold" aria-live="polite">{{ _("Conectando…") }}</p>
+      <p id="voice-remaining" class="text-xs text-moss">{% if remaining is not none %}{{ _("%(n)s min de voz restantes", n=(remaining / 60) | round(0, "ceil") | int) }}{% endif %}</p>
+    </div>
+    <progress id="voice-level" class="meter mt-3 w-full" max="1" value="0" aria-label="{{ _('Volume do microfone') }}"></progress>
+    {# Shown by voice.js while the background noise stays high (D68). #}
+    <p id="voice-noise-tip" role="status" class="mt-3 hidden rounded-2xl bg-cream px-3 py-2 text-xs text-ink">{{ _("Ambiente barulhento: use fones com microfone ou continue por texto.") }}</p>
+    <div class="mt-4 flex gap-3">
+      <button type="button" id="voice-mute" aria-pressed="false"
+              class="flex-1 rounded-full border border-moss/60 px-4 py-2.5 text-sm font-semibold transition active:scale-95">
+        <span data-when="unmuted">{{ _("Silenciar") }}</span><span data-when="muted" class="hidden">{{ _("Ativar microfone") }}</span>
+      </button>
+      <button type="button" id="voice-end"
+              class="flex-1 rounded-full bg-sage px-4 py-2.5 text-sm font-semibold text-ink transition active:scale-95">{{ _("Voltar ao texto") }}</button>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+{# Why voice mode ended (`?voz=<EndReason>`), plus the client-side microphone error. #}
+{% macro voice_notices(reason) %}
+{% set messages = {
+  "voice_limit": _("Seus minutos de conversa por voz acabaram. Você pode continuar por texto."),
+  "failure": _("A conversa por voz foi interrompida. Continue por texto daqui mesmo."),
+  "unavailable": _("A conversa por voz foi interrompida. Continue por texto daqui mesmo."),
+  "turn_quota": _("Você atingiu o limite de mensagens de hoje. Volte amanhã para continuar."),
+} %}
+{% if reason in messages %}
+<p role="status" class="mt-3 rounded-2xl bg-cream px-4 py-2 text-xs text-taupe-strong">{{ messages[reason] }}</p>
+{% endif %}
+<p id="voice-notice-microphone" role="alert" class="mt-3 hidden rounded-2xl bg-cream px-4 py-2 text-xs text-danger">{{ _("Não consegui acessar o microfone. Verifique a permissão do navegador ou continue por texto.") }}</p>
 {% endmacro %}

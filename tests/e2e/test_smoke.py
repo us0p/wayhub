@@ -236,3 +236,28 @@ def test_finished_interview_opens_a_modal_to_the_profile(
     expect(modal.get_by_text("Sua entrevista terminou!")).to_be_visible()
     modal.get_by_role("link", name="Conferir meu perfil").click()
     expect(page.get_by_role("heading", name="Seu perfil")).to_be_visible()
+
+
+def test_voice_mode_starts_and_falls_back_to_text(
+    viewport_page: tuple[str, Page], base_url: str
+) -> None:
+    """Voice mode with Chromium's fake mic and the fake STT/TTS: the worklet, WebSocket and
+    panel come up without console errors (CSP), and ending it returns to the text composer."""
+    _, page = viewport_page
+
+    _sign_up(page, base_url)
+    page.get_by_role("link", name="Entrevista", exact=True).click()
+    page.wait_for_load_state("load")
+
+    page.get_by_role("button", name="Conversar por voz").click()
+    expect(page.get_by_text("Ouvindo…")).to_be_visible()  # the server said ready
+    expect(page.get_by_text("30 min de voz restantes")).to_be_visible()
+    expect(page.get_by_label("Sua resposta")).to_be_hidden()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    page.get_by_role("button", name="Silenciar").click()
+    expect(page.get_by_text("Microfone silenciado")).to_be_visible()
+
+    page.get_by_role("button", name="Voltar ao texto").click()
+    expect(page.get_by_label("Sua resposta")).to_be_visible()
+    expect(page.get_by_role("button", name="Voltar ao texto")).to_be_hidden()

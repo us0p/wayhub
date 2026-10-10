@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% from "components/chat.html" import bubble, pending_bubble, progress_compact, progress_panel, composer %}
+{% from "components/chat.html" import bubble, pending_bubble, progress_compact, progress_panel, composer, voice_panel, voice_notices %}
 {% block title %}{{ _("Entrevista") }} · Mentor{% endblock %}
 {% block head %}
 <script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.4/sse.js"
         integrity="sha384-QA9wXqexhwzXTuTvuF5QP82pddm3R2hy81UzXi7ioNTqNF2b75hlkkSGjafohhL3"
         crossorigin="anonymous" defer></script>
+<script type="module" src="{{ url_for('static', path='js/voice.js') }}"></script>
 {% endblock %}
 {% block main %}
 {# Full-height chat (D38): the transcript scrolls between the header and the composer. Phone:
@@ -24,7 +25,13 @@
             {% if pending %}{{ pending_bubble(pending) }}{% endif %}
           </div>
         </div>
-        {{ composer(disabled=pending is not none, complete=complete) }}
+        {{ voice_notices(voice_notice) }}
+        {# A voice session that just completed the interview opens the closing modal (D61). #}
+        {{ composer(disabled=pending is not none, complete=complete, go_to_profile=complete and voice_notice == "completed") }}
+        {% if not complete %}{{ voice_panel(voice_remaining) }}{% endif %}
+        {# Cloned by voice.js for the live transcript, so bubbles keep one definition. #}
+        <template id="voice-bubble-user">{{ bubble("user", "") }}</template>
+        <template id="voice-bubble-assistant">{{ bubble("assistant", "") }}</template>
       </section>
       <aside class="md:col-span-4 md:overflow-y-auto">{{ progress_panel(progress) }}</aside>
     </div>

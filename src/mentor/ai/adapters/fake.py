@@ -189,9 +189,10 @@ class FakeEmbeddings(Embeddings):
 @dataclass
 class FakeSTT:
     """Emits the next scripted transcript for each audio chunk received; once the script is
-    exhausted, keeps consuming audio silently."""
+    exhausted, keeps consuming audio silently. The script is shared by successive streams
+    (stream rotation), and a scripted exception is raised in place of a transcript."""
 
-    transcripts: list[Transcript] = field(default_factory=list)
+    transcripts: list[Transcript | Exception] = field(default_factory=list)
     received: bytearray = field(default_factory=bytearray)
     languages: list[str] = field(default_factory=list)
 
@@ -199,19 +200,23 @@ class FakeSTT:
         self, audio: AsyncIterable[bytes], *, language: str = DEFAULT_LANGUAGE
     ) -> AsyncIterator[Transcript]:
         self.languages.append(language)
-        pending = deque(self.transcripts)
         async for chunk in audio:
             self.received.extend(chunk)
-            if pending:
-                yield pending.popleft()
+            if self.transcripts:
+                item = self.transcripts.pop(0)
+                if isinstance(item, Exception):
+                    raise item
+                yield item
 
 
 @dataclass
 class FakeTTS:
-    """Yields silence: 2 bytes (one PCM16 sample) per character of each text chunk."""
+    """Yields silence: 2 bytes (one PCM16 sample) per character of each text chunk.
+    With `error` set, raises it on the first chunk instead."""
 
     texts: list[str] = field(default_factory=list)
     voices: list[str | None] = field(default_factory=list)
+    error: Exception | None = None
 
     async def stream(
         self, text: AsyncIterable[str], *, voice: str | None = None
@@ -219,6 +224,8 @@ class FakeTTS:
         self.voices.append(voice)
         async for chunk in text:
             if chunk.strip():
+                if self.error is not None:
+                    raise self.error
                 self.texts.append(chunk)
                 yield b"\x00\x00" * len(chunk)
 

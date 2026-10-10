@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -9,6 +10,8 @@ from starlette.responses import Response
 from mentor import health
 from mentor.account import routes as account_routes
 from mentor.agents.checkpoint import close_checkpointer, get_checkpointer
+from mentor.ai.ports import AIConfigurationError
+from mentor.ai.registry import check_google_credentials
 from mentor.auth import routes as auth_routes
 from mentor.auth.csrf import CSRFMiddleware
 from mentor.auth.deps import ConsentRequiredError, LoginRequiredError
@@ -18,13 +21,23 @@ from mentor.profile import routes as profile_routes
 from mentor.quotas.service import QuotaExceededError
 from mentor.security import SecurityHeadersMiddleware
 from mentor.settings import get_settings
+from mentor.voice import routes as voice_routes
 from mentor.web import STATIC_DIR, templates
 from mentor.web import routes as web_routes
 from mentor.web.redirects import redirect, with_next
 
+log = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
+    try:
+        check_google_credentials(settings)
+    except AIConfigurationError as exc:
+        if not settings.is_dev_like:
+            raise
+        log.warning("%s: voice mode will fail until they are set", exc)
     # The saver's setup() runs CREATE INDEX CONCURRENTLY, which waits for every open transaction.
     # Doing it on first use inside a request would deadlock against that request's own session.
     await get_checkpointer()
@@ -59,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(legal_routes.router)
     app.include_router(interview_routes.router)
     app.include_router(account_routes.router)
+    app.include_router(voice_routes.router)
     app.include_router(profile_routes.router)
     app.include_router(web_routes.router)
 
