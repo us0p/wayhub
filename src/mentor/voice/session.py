@@ -43,7 +43,7 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mentor.ai.errors import describe
-from mentor.ai.ports import STT_SAMPLE_RATE, TTS_SAMPLE_RATE
+from mentor.ai.ports import STT_SAMPLE_RATE, TTS_SAMPLE_RATE, AIProviderError
 from mentor.interview.checklist import Progress
 from mentor.interview.engine import (
     InterviewEngine,
@@ -115,12 +115,28 @@ class AgentDone:
     completed: bool
 
 
+class NoticeKind(StrEnum):
+    RECONNECTING = "reconnecting"
+    RECONNECTED = "reconnected"
+
+
+@dataclass(frozen=True)
+class Notice:
+    """A passing message for the user (a toast); the conversation goes on (D73)."""
+
+    kind: NoticeKind
+    attempt: int = 0
+    attempts: int = 0
+
+
 @dataclass(frozen=True)
 class Ended:
     reason: EndReason
 
 
-type VoiceEvent = Ready | Remaining | UserSpeech | UserTurnSaved | AgentText | AgentDone | Ended
+type VoiceEvent = (
+    Ready | Remaining | UserSpeech | UserTurnSaved | AgentText | AgentDone | Notice | Ended
+)
 
 
 class VoiceOutput(Protocol):
@@ -159,6 +175,10 @@ class VoiceSession:
     # that between two sentences: the stream is closed after this idle time and a new one is
     # opened for the next sentence (D70).
     tts_idle_seconds = 3.0
+    # A failed speech-to-text or text-to-speech connection is retried this many times in a row,
+    # with a growing pause, before the session gives up and falls back to text (D73).
+    max_reconnects = 3
+    reconnect_backoff_seconds = 1.0
 
     def __init__(self, engine: InterviewEngine, interview: Interview, out: VoiceOutput) -> None:
         self.engine = engine
@@ -174,6 +194,8 @@ class VoiceSession:
         self._tts: asyncio.Task[None] | None = None
         self._speaking_until = 0.0  # monotonic estimate of when the browser stops playing
         self._listening = True  # False while the STT stream is closed for the agent's speech
+        self._stt_failures = 0  # consecutive failed STT connections
+        self._tts_failures = 0
         self._muted = False
         self._opened_at = time.monotonic()
         self._streamed = 0.0  # seconds of audio received
@@ -312,8 +334,30 @@ class VoiceSession:
     async def _listen(self) -> None:
         while True:
             first = await self._audio.get()
-            if first is not None:  # a stream opens with the first audio after a pause
+            if first is None:
+                continue
+            try:  # a stream opens with the first audio after a pause
                 await self._transcribe(first)
+            except AIProviderError as exc:
+                self._stt_failures += 1
+                await self._reconnect(self._stt_failures, exc)  # the next audio reopens it
+
+    async def _reconnect(self, failures: int, exc: AIProviderError) -> None:
+        """Tell the user and pause before another try; give up (end the session) after
+        `max_reconnects` failures in a row."""
+        if failures > self.max_reconnects:
+            raise exc
+        log.warning(
+            "voice connection failed, retry %d/%d: %s", failures, self.max_reconnects, describe(exc)
+        )
+        await self.out.event(Notice(NoticeKind.RECONNECTING, failures, self.max_reconnects))
+        await asyncio.sleep(self.reconnect_backoff_seconds * failures)
+
+    async def _reconnected(self, failures_attr: str) -> None:
+        """The connection works again: clear the failure count and say so once."""
+        if getattr(self, failures_attr):
+            setattr(self, failures_attr, 0)
+            await self.out.event(Notice(NoticeKind.RECONNECTED))
 
     async def _transcribe(self, first: bytes) -> None:
         async def audio() -> AsyncIterator[bytes]:
@@ -327,6 +371,7 @@ class VoiceSession:
                 chunk = await self._audio.get()
 
         async for transcript in self.engine.ai.stt.stream(audio()):
+            await self._reconnected("_stt_failures")
             text = transcript.text.strip()
             if not text:
                 continue
@@ -437,29 +482,46 @@ class VoiceSession:
             await asyncio.wait({previous})
 
         finished = False
+        retry: list[str] = []  # sentences to send again after a failed connection
 
-        async def texts(first: str) -> AsyncIterator[str]:
-            nonlocal finished
-            yield first
-            while True:
-                try:
-                    sentence = await asyncio.wait_for(sentences.get(), self.tts_idle_seconds)
-                except TimeoutError:
-                    return  # idle: end this TTS stream; the next sentence opens another
-                if sentence is None:
-                    finished = True
+        while not finished or retry:
+            batch, retry = retry, []
+            if not batch:
+                if (first := await sentences.get()) is None:
                     return
-                yield sentence
+                batch = [first]
+            sent = list(batch)  # what this TTS stream was given
+            heard = False
 
-        while not finished:
-            if (first := await sentences.get()) is None:
-                return
-            async for pcm in self.engine.ai.tts.stream(texts(first)):
-                now = time.monotonic()
-                self._speaking_until = (
-                    max(now, self._speaking_until) + len(pcm) / TTS_BYTES_PER_SECOND
-                )
-                await self.out.audio(pcm)
+            async def texts(batch: list[str] = batch, sent: list[str] = sent) -> AsyncIterator[str]:
+                nonlocal finished
+                for again in batch:
+                    yield again
+                while True:
+                    try:
+                        sentence = await asyncio.wait_for(sentences.get(), self.tts_idle_seconds)
+                    except TimeoutError:
+                        return  # idle: end this TTS stream; the next sentence opens another
+                    if sentence is None:
+                        finished = True
+                        return
+                    sent.append(sentence)
+                    yield sentence
+
+            try:
+                async for pcm in self.engine.ai.tts.stream(texts()):
+                    heard = True
+                    await self._reconnected("_tts_failures")
+                    now = time.monotonic()
+                    self._speaking_until = (
+                        max(now, self._speaking_until) + len(pcm) / TTS_BYTES_PER_SECOND
+                    )
+                    await self.out.audio(pcm)
+            except AIProviderError as exc:
+                self._tts_failures += 1
+                await self._reconnect(self._tts_failures, exc)
+                if not heard:  # nothing was spoken yet: say it again on a new connection
+                    retry = sent
 
     def _deaf(self) -> bool:
         """The agent is speaking (or just finished): the microphone is not listened to."""

@@ -168,7 +168,6 @@
 {% macro voice_notices(reason) %}
 {% set messages = {
   "voice_limit": _("Seus minutos de conversa por voz acabaram. Você pode continuar por texto."),
-  "failure": _("A conversa por voz foi interrompida. Continue por texto daqui mesmo."),
   "unavailable": _("A conversa por voz foi interrompida. Continue por texto daqui mesmo."),
   "turn_quota": _("Você atingiu o limite de mensagens de hoje. Volte amanhã para continuar."),
 } %}
@@ -176,4 +175,14 @@
 <p role="status" class="mt-3 rounded-2xl bg-cream px-4 py-2 text-xs text-taupe-strong">{{ messages[reason] }}</p>
 {% endif %}
 <p id="voice-notice-microphone" role="alert" class="mt-3 hidden rounded-2xl bg-cream px-4 py-2 text-xs text-danger">{{ _("Não consegui acessar o microfone. Verifique a permissão do navegador ou continue por texto.") }}</p>
+{% endmacro %}
+
+{# A passing notification that never takes the focus or blocks the page (D73). voice.js shows
+   the connection messages; after a voice session failed, the page shows `failed` once. #}
+{% macro toast(reason=None) %}
+<div id="toast" role="status" aria-live="polite" hidden
+     data-reconnecting="{{ _('Erro de conexão, reconectando… (%(n)s/%(total)s)', n='{n}', total='{total}') }}"
+     data-reconnected="{{ _('Conexão restabelecida.') }}"
+     {% if reason == 'failure' %}data-show="{{ _('Não consegui restabelecer a conexão de voz. Você pode continuar por texto.') }}"{% endif %}
+     class="pointer-events-none fixed inset-x-5 top-4 z-50 mx-auto max-w-sm rounded-2xl bg-ink px-4 py-3 text-center text-sm text-cream shadow-lg md:top-20"></div>
 {% endmacro %}

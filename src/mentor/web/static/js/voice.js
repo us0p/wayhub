@@ -162,6 +162,9 @@ class VoiceSession {
         this.thinking = false;
         this.swapProgress(event.progress_html);
         break;
+      case "notice":
+        this.notify(event);
+        break;
       case "end":
         this.finish(event.reason);
         return;
@@ -264,6 +267,17 @@ class VoiceSession {
     else if (this.thinking) state = "thinking";
     else if (this.muted) state = "muted";
     byId("voice-status").textContent = panel.dataset[`label${state[0].toUpperCase()}${state.slice(1)}`];
+  }
+
+  // Connection trouble is a passing toast; the interview carries on (D73).
+  notify({ kind, attempt, attempts }) {
+    const toast = byId("toast");
+    if (!toast) return;
+    const text =
+      kind === "reconnecting"
+        ? toast.dataset.reconnecting.replace("{n}", attempt).replace("{total}", attempts)
+        : toast.dataset.reconnected;
+    window.showToast(text, kind === "reconnecting" ? 6 : 3);
   }
 
   showRemaining(seconds) {

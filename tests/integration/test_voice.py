@@ -42,6 +42,7 @@ def fast_turns(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(VoiceSession, "end_of_turn_seconds", 0.0)
     monkeypatch.setattr(VoiceSession, "unfinished_turn_seconds", 0.0)
     monkeypatch.setattr(VoiceSession, "listen_again_seconds", 0.0)
+    monkeypatch.setattr(VoiceSession, "reconnect_backoff_seconds", 0.0)
 
 
 async def _user(client: AsyncClient, db: AsyncSession, **override: int | None) -> User:
@@ -393,7 +394,34 @@ async def test_daily_turn_quota_ends_voice_mode(
     assert not [t for t in await _turns(db, user) if t.role is TurnRole.USER]
 
 
-async def test_speech_recognition_failure_falls_back_to_text(
+def _notices(received: list[dict[str, Any] | bytes], kind: str) -> list[dict[str, Any]]:
+    return [e for e in events(received, "notice") if e["kind"] == kind]
+
+
+async def test_speech_recognition_is_retried_after_a_failed_connection(
+    app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
+) -> None:
+    """D73: a passing "reconnecting" notice, then the conversation just goes on."""
+    user = await _user(client, db)
+    fake_ai.stt.transcripts = [
+        AIProviderError("Google Speech-to-Text error 503"),
+        Transcript("Meu nome é Ana.", is_final=True),
+    ]
+
+    async with _ws(app, client) as ws:
+        await ws.receive()
+        await ws.send_bytes(CHUNK)  # → the connection fails
+        await ws.send_bytes(CHUNK)  # → the retry hears this one
+        received = await ws.receive_until(has_event("agent_done"))
+
+    assert [(n["attempt"], n["attempts"]) for n in _notices(received, "reconnecting")] == [(1, 3)]
+    assert len(_notices(received, "reconnected")) == 1
+    assert not events(received, "end")
+    assert events(received, "user_turn")[0]["text"] == "Meu nome é Ana."
+    assert (await _turns(db, user))[-1].text == "Resposta de teste."
+
+
+async def test_speech_recognition_failing_three_times_falls_back_to_text(
     app: FastAPI,
     client: AsyncClient,
     db: AsyncSession,
@@ -403,20 +431,59 @@ async def test_speech_recognition_failure_falls_back_to_text(
     await _user(client, db)
     fake_ai.stt.transcripts = [
         AIProviderError("Google Speech-to-Text error 503", log_detail="STT ServiceUnavailable")
+        for _ in range(4)  # the first try and three retries
     ]
 
     async with _ws(app, client) as ws:
         await ws.receive()
-        await ws.send_bytes(CHUNK)
+        for _ in range(4):
+            await ws.send_bytes(CHUNK)
         received = await ws.receive_until(has_event("end"))
 
+    assert [n["attempt"] for n in _notices(received, "reconnecting")] == [1, 2, 3]
     assert events(received, "end") == [{"type": "end", "reason": "failure"}]
     failure = next(r.getMessage() for r in caplog.records if "voice session failed" in r.message)
     assert "failed in _listen after" in failure and "listening, mic on" in failure
     assert "[STT ServiceUnavailable]" in failure
 
 
-async def test_speech_synthesis_failure_falls_back_and_keeps_the_reply(
+async def test_speech_synthesis_is_retried_with_the_same_sentence(
+    app: FastAPI,
+    client: AsyncClient,
+    db: AsyncSession,
+    fake_ai: FakeAI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _user(client, db)
+    fake_ai.stt.transcripts = [Transcript("Olá.", is_final=True)]
+    spoken: list[str] = []
+    attempts = 0
+
+    async def flaky_tts(
+        text: AsyncIterable[str], *, voice: str | None = None
+    ) -> AsyncIterator[bytes]:
+        nonlocal attempts
+        attempts += 1
+        async for chunk in text:
+            if attempts == 1:
+                raise AIProviderError("Google Text-to-Speech error 503")
+            spoken.append(chunk)
+            yield b"\x00\x00" * 100
+
+    monkeypatch.setattr(fake_ai.tts, "stream", flaky_tts)
+
+    async with _ws(app, client) as ws:
+        await ws.receive()
+        await ws.send_bytes(CHUNK)
+        received = await ws.receive_until(
+            lambda r: bool(_notices(r, "reconnected")) and any(isinstance(m, bytes) for m in r)
+        )
+
+    assert len(_notices(received, "reconnecting")) == 1
+    assert spoken == ["Resposta de teste."]  # nothing was lost, nothing repeated
+
+
+async def test_speech_synthesis_failing_three_times_falls_back_and_keeps_the_reply(
     app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
 ) -> None:
     user = await _user(client, db)
@@ -428,6 +495,7 @@ async def test_speech_synthesis_failure_falls_back_and_keeps_the_reply(
         await ws.send_bytes(CHUNK)
         received = await ws.receive_until(has_event("end"))
 
+    assert [n["attempt"] for n in _notices(received, "reconnecting")] == [1, 2, 3]
     assert events(received, "end")[0]["reason"] == "failure"
     # The text reply was generated and saved; the text UI shows it after the fallback.
     assert (await _turns(db, user))[-1].text == "Resposta de teste."
@@ -467,6 +535,21 @@ async def test_page_offers_voice_mode_and_explains_why_it_ended(
     assert "Seus minutos de conversa por voz acabaram." in page.text
     assert 'id="voice-noise-tip" role="status" class="mt-3 hidden' in page.text  # until noisy
     assert " style=" not in page.text and " hx-on" not in page.text  # CSP (D37)
+
+
+async def test_page_has_a_toast_for_connection_notices_and_shows_the_failure_once(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    await _user(client, db)
+
+    normal = await client.get("/entrevista")
+    failed = await client.get("/entrevista?voz=failure")
+
+    assert 'id="toast"' in normal.text and "data-show=" not in normal.text
+    assert "Erro de conexão, reconectando" in normal.text
+    assert "Não consegui restabelecer a conexão de voz." in failed.text
+    assert "data-show=" in failed.text
+    assert "A conversa por voz foi interrompida" not in failed.text  # no inline note any more
 
 
 async def test_page_marks_voice_as_exhausted_and_ignores_unknown_reasons(

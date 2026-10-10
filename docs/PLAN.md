@@ -14,7 +14,7 @@
 | 3. AI ports + adapters + fakes | Done — branch `feat/m3-ai-ports` |
 | 4. Text interview | Done — branch `feat/m4-text-interview` (stacked on M3); reworked as a LangGraph agent (D54–D57) |
 | 5. Review/edit profile | Done — branch `feat/m5-profile-review` (D60, D61) |
-| 6. Voice interview | Done — branch `feat/m6-voice-interview` (D62–D71) |
+| 6. Voice interview | Done — branch `feat/m6-voice-interview` (D62–D73) |
 | 7–10 | Not started |
 
 ## Context

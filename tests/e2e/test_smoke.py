@@ -263,3 +263,19 @@ def test_voice_mode_starts_and_falls_back_to_text(
     page.get_by_role("button", name="Voltar ao texto").click()
     expect(page.get_by_label("Sua resposta")).to_be_visible()
     expect(page.get_by_role("button", name="Voltar ao texto")).to_be_hidden()
+
+
+def test_voice_failure_shows_a_passing_toast_and_keeps_the_chat(
+    viewport_page: tuple[str, Page], base_url: str
+) -> None:
+    """After a voice session gave up (D73) the chat is back, with a toast that goes away by
+    itself and never blocks the composer."""
+    _, page = viewport_page
+    _sign_up(page, base_url)
+    page.goto(base_url + "/entrevista?voz=failure")
+    page.wait_for_load_state("load")
+
+    toast = page.get_by_role("status").filter(has_text="Não consegui restabelecer a conexão")
+    expect(toast).to_be_visible()
+    page.get_by_label("Sua resposta").fill("Posso digitar com o aviso na tela.")  # not blocked
+    expect(toast).to_be_hidden(timeout=10_000)  # passing, not permanent

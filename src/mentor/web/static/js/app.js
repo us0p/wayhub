@@ -42,3 +42,18 @@ document.body.addEventListener("htmx:load", (event) => {
     : root.querySelector?.("dialog[data-auto-open]");
   if (dialog && !dialog.open) dialog.showModal();
 });
+
+// Toast: a passing message in #toast (pointer-events: none, so it never gets in the way).
+let toastTimer = null;
+window.showToast = (message, seconds = 4) => {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, seconds * 1000);
+};
+document.addEventListener("DOMContentLoaded", () => {
+  const message = document.getElementById("toast")?.dataset.show;
+  if (message) window.showToast(message, 7);
+});
