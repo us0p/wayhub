@@ -25,3 +25,13 @@
   "education": _("Formação"), "other": _("Outro"),
 } %}
 {% set source = {"text": _("Texto"), "url": _("Link"), "pdf": _("PDF"), "images": _("Prints")} %}
+{# The fit warning (M8, D80): each requirement's verdict and its badge. #}
+{% set verdict = {
+  "met": _("Atende"), "partial": _("Em parte"), "gap": _("Lacuna"), "unknown": _("Sem informação"),
+} %}
+{% set verdict_badge = {
+  "met": "bg-sage text-ink",
+  "partial": "bg-honey text-ink",
+  "gap": "bg-surface text-danger ring-1 ring-danger",
+  "unknown": "bg-cream text-taupe-strong",
+} %}

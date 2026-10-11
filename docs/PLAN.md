@@ -15,8 +15,9 @@
 | 4. Text interview | Done — branch `feat/m4-text-interview` (stacked on M3); reworked as a LangGraph agent (D54–D57) |
 | 5. Review/edit profile | Done — branch `feat/m5-profile-review` (D60, D61) |
 | 6. Voice interview | Done — branch `feat/m6-voice-interview` (D62–D76) |
-| 7. Job import | In progress — branch `feat/m7-job-ingestion` (D78, D79): text, PDF, screenshots and links on the Procrastinate worker; read-only job page |
-| 8–10 | Not started |
+| 7. Job import | Done — PR #7 (`feat/m7-job-ingestion`, D78, D79): text, PDF, screenshots and links on the Procrastinate worker; read-only job page |
+| 8. Fit warning | In progress — branch `feat/m8-fit-warning` (D80): per-requirement verdicts on the job page, analyzed right after import |
+| 9–10 | Not started |
 
 ## Context
 Mentor Phase 1 (see `SCOPE.md`) is a candidate-focused career tool. This MVP delivers:

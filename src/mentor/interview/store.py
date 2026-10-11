@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mentor.auth.models import User
 from mentor.interview.checklist import ChecklistItem, ItemState, Progress
-from mentor.interview.models import ChecklistEntry, ChecklistStatus, Interview
+from mentor.interview.models import ChecklistEntry, ChecklistStatus, Interview, InterviewStatus
 from mentor.interview.schemas import ProfilePatch
 
 
@@ -16,6 +16,16 @@ async def latest_interview(db: AsyncSession, user: User) -> Interview | None:
         .order_by(Interview.seq.desc())
         .limit(1)
     )
+
+
+async def has_completed_interview(db: AsyncSession, user: User) -> bool:
+    """Whether any interview was completed (a follow-up being open doesn't undo it)."""
+    found = await db.scalar(
+        select(Interview.id)
+        .where(Interview.user_id == user.id, Interview.status == InterviewStatus.COMPLETE)
+        .limit(1)
+    )
+    return found is not None
 
 
 async def checklist_progress(db: AsyncSession, user: User) -> Progress:
