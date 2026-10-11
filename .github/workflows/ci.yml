@@ -74,6 +74,8 @@ jobs:
         with: { version: "${{ env.UV_VERSION }}", enable-cache: true }
       - name: Generate per-run SECRET_KEY
         run: echo "SECRET_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Pango for WeasyPrint (CV PDF tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 fonts-liberation2
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
       - run: uv run alembic downgrade base && uv run alembic upgrade head

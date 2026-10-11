@@ -1,0 +1,45 @@
+{# A CV version: being written (polls itself), failed, or ready with its downloads, the CV
+   and what the verification changed (D81). #}
+{% import "cv/_labels.html" as C %}
+{% if cv.status == "pending" %}
+<div id="cv-body" hx-get="/curriculos/{{ cv.id }}/estado" hx-trigger="every 2s" hx-swap="outerHTML"
+     role="status" aria-live="polite" class="mt-6 rounded-[var(--radius-card)] bg-ink p-6 text-cream">
+  <div class="flex items-center gap-3">
+    <span class="h-3 w-3 shrink-0 animate-pulse rounded-full bg-sage" aria-hidden="true"></span>
+    <p class="font-semibold">{{ _("Escrevendo seu currículo…") }}</p>
+  </div>
+  <p class="mt-2 text-sm text-moss">{{ _("Primeiro eu escrevo, depois confiro cada frase com o seu perfil. Costuma levar cerca de um minuto, e pode sair desta página.") }}</p>
+</div>
+{% elif cv.status == "failed" %}
+<div id="cv-body" role="status" class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">
+  <p class="font-semibold">{{ _("Não consegui gerar este currículo agora.") }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Tente gerar de novo daqui a pouco, na página da vaga.") }}</p>
+  <a href="/vagas/{{ job.id }}#curriculos" class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Voltar para a vaga") }}</a>
+</div>
+{% else %}
+<div id="cv-body" class="mt-6 space-y-6">
+  <div class="flex flex-wrap gap-3">
+    <a href="/curriculos/{{ cv.id }}/pdf" download class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Baixar PDF") }}</a>
+    <a href="/curriculos/{{ cv.id }}/docx" download class="inline-flex items-center justify-center rounded-full border border-moss bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition active:scale-95">{{ _("Baixar DOCX") }}</a>
+  </div>
+  {% include "cv/_document.html" %}
+  <section aria-labelledby="changes-title" class="rounded-[var(--radius-card)] bg-cream p-5 md:p-6">
+    <h2 id="changes-title" class="text-lg font-semibold">{{ _("O que a verificação mudou") }}</h2>
+    {% if changes %}
+    <p class="mt-2 text-sm text-taupe-strong">{{ _("Antes de mostrar o currículo, conferi cada frase com o seu perfil. Estas não tinham base suficiente:") }}</p>
+    <ul class="mt-4 space-y-3">
+      {% for change in changes %}
+      <li class="rounded-2xl bg-surface p-4 text-sm shadow-sm ring-1 ring-moss/40">
+        <p class="text-xs font-medium uppercase tracking-wide text-taupe-strong">{{ C.section.get(change.section, change.section) }} · {{ _("Reescrita") if change.revised else _("Removida") }}</p>
+        <p class="mt-2 text-taupe-strong line-through">{{ change.original }}</p>
+        {% if change.revised %}<p class="mt-1">{{ change.revised }}</p>{% endif %}
+        <p class="mt-2 border-t border-moss/40 pt-2 text-taupe-strong">{{ change.reason }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="mt-2 text-sm text-taupe-strong">{{ _("Conferi cada frase com o seu perfil: todas têm base no que você contou.") }}</p>
+    {% endif %}
+  </section>
+</div>
+{% endif %}

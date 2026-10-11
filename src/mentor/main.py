@@ -15,6 +15,7 @@ from mentor.ai.registry import check_google_credentials
 from mentor.auth import routes as auth_routes
 from mentor.auth.csrf import CSRFMiddleware
 from mentor.auth.deps import ConsentRequiredError, LoginRequiredError
+from mentor.cv import routes as cv_routes
 from mentor.interview import routes as interview_routes
 from mentor.jobs import routes as jobs_routes
 from mentor.legal import routes as legal_routes
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     app.include_router(voice_routes.router)
     app.include_router(profile_routes.router)
     app.include_router(jobs_routes.router)
+    app.include_router(cv_routes.router)
     app.include_router(web_routes.router)
 
     @app.exception_handler(LoginRequiredError)

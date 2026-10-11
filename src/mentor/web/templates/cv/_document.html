@@ -1,0 +1,39 @@
+{# The CV on the page: the same content and order as the PDF and DOCX (D10). #}
+{% set cv_doc = doc.cv %}
+{% set words = doc.words %}
+<article aria-label="{{ _('Currículo') }}" lang="{{ cv_doc.language }}" class="rounded-2xl bg-surface p-6 text-sm leading-relaxed shadow-sm ring-1 ring-moss/40 md:p-10">
+  <h2 class="text-2xl font-semibold">{{ cv_doc.contact.name or "" }}</h2>
+  {% if cv_doc.headline %}<p class="mt-1 text-base">{{ cv_doc.headline.text }}</p>{% endif %}
+  {% if doc.contact_line %}<p class="mt-2 break-words text-xs text-taupe-strong">{{ doc.contact_line | join(" | ") }}</p>{% endif %}
+  {% macro heading(text) %}<h3 class="mt-6 border-b border-sage pb-1 text-xs font-semibold uppercase tracking-wider">{{ text }}</h3>{% endmacro %}
+  {% if cv_doc.summary %}
+  {{ heading(words.summary) }}
+  <p class="mt-2">{{ cv_doc.summary.text }}</p>
+  {% endif %}
+  {% if cv_doc.experiences %}
+  {{ heading(words.experience) }}
+  {% for entry in cv_doc.experiences %}
+  <div class="mt-3">
+    <p class="font-semibold">{{ entry.title.text }}{% if entry.company %} <span class="font-normal">— {{ entry.company }}</span>{% endif %}</p>
+    {% if doc.periods[loop.index0] %}<p class="text-xs text-taupe-strong">{{ doc.periods[loop.index0] }}</p>{% endif %}
+    {% if entry.bullets %}
+    <ul class="mt-1 list-disc space-y-1 pl-5">{% for bullet in entry.bullets %}<li>{{ bullet.text }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% if cv_doc.skills %}
+  {{ heading(words.skills) }}
+  <p class="mt-2">{{ cv_doc.skills | map(attribute="text") | join(", ") }}</p>
+  {% endif %}
+  {% if cv_doc.education %}
+  {{ heading(words.education) }}
+  {% for item in cv_doc.education %}
+  <p class="mt-2"><span class="font-semibold">{{ item.text }}</span>{% if item.detail %}<span class="block text-xs text-taupe-strong">{{ item.detail }}</span>{% endif %}</p>
+  {% endfor %}
+  {% endif %}
+  {% if cv_doc.languages %}
+  {{ heading(words.languages) }}
+  {% for item in cv_doc.languages %}<p class="mt-2">{{ item.text }}</p>{% endfor %}
+  {% endif %}
+</article>

@@ -23,6 +23,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 # metadata server when credentials are missing; that probe made a voice session hang ~12 s (D69).
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1 NO_GCE_CHECK=true
+# Pango for WeasyPrint (CV PDFs) and Liberation Sans, the CV's font (metric-compatible with
+# Arial, which the DOCX names) (D81).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-liberation2 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
