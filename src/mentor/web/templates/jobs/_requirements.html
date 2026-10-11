@@ -1,0 +1,40 @@
+{# The posting's requirements with the fit verdict of each (M8, D80); swapped in out of band
+   when the analysis finishes (see `_fit.html`). #}
+{% import "jobs/_labels.html" as J %}
+{% set verdicts = fit.verdicts() %}
+<div id="job-requirements" class="space-y-6"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for importance, title, empty in [
+    ("must", _("O que a vaga exige"), _("A vaga não lista requisitos obrigatórios.")),
+    ("nice", _("Diferenciais"), _("A vaga não lista diferenciais.")),
+  ] %}
+  {% set items = job.requirements | selectattr("importance", "equalto", importance) | list %}
+  <section aria-labelledby="req-{{ importance }}">
+    <h2 id="req-{{ importance }}" class="text-lg font-semibold">{{ title }}</h2>
+    {% if items %}
+    <ul class="mt-3 space-y-2">
+      {% for req in items %}
+      {% set item = verdicts.get(req.id) %}
+      <li class="rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-moss/40">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm">{{ req.text }}</p>
+            {% if req.min_years %}<p class="mt-1 text-xs text-taupe-strong">{{ _("Mínimo de %(n)s anos", n=req.min_years | round(1) | replace(".0", "")) }}</p>{% endif %}
+          </div>
+          {% if item %}
+          <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium {{ J.verdict_badge[item.verdict.value] }}">{{ J.verdict[item.verdict.value] }}</span>
+          {% else %}
+          <span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-taupe-strong">{{ J.kind[req.kind.value] }}</span>
+          {% endif %}
+        </div>
+        {% if item %}
+        <p class="mt-2 border-t border-moss/40 pt-2 text-sm text-taupe-strong">{{ item.message or _("Não encontrei isso no seu perfil para confirmar.") }}</p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="mt-3 text-sm text-taupe-strong">{{ empty }}</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>

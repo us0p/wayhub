@@ -2,6 +2,8 @@
 DOCX (python-docx) all come from the same `CVContent`. One ATS-friendly single-column layout:
 no photo, no tables or columns, real text, standard section headings in the CV's language.
 
+Items the user hid in the editor (M9b) are left out of all three.
+
 PDF and DOCX are rendered when downloaded (a CV is small; it takes well under a second), in a
 worker thread so the event loop isn't blocked.
 """
@@ -98,6 +100,8 @@ def filename(content: CVContent, job_title: str | None, extension: str) -> str:
 
 
 def context(content: CVContent) -> dict[str, object]:
+    """What the page and the PDF show: the CV without the hidden items."""
+    content = content.visible()
     words = labels(content.language)
     return {
         "cv": content,
@@ -130,6 +134,7 @@ def _heading(document: object, text: str) -> None:
 
 
 def _docx(content: CVContent) -> bytes:
+    content = content.visible()
     words = labels(content.language)
     document = Document()
     style = document.styles["Normal"]

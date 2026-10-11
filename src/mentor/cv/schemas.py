@@ -79,6 +79,8 @@ class Verification(BaseModel):
 class Line(BaseModel):
     text: str
     source_ids: list[uuid.UUID] = Field(default_factory=list)
+    hidden: bool = False  # left out of the CV by the user (M9b)
+    user_edited: bool = False  # the text is the user's own statement (D81), not verified
 
 
 class Link(BaseModel):
@@ -102,6 +104,7 @@ class ExperienceEntry(BaseModel):
     end: str | None = None
     current: bool = False
     bullets: list[Line] = Field(default_factory=list)
+    hidden: bool = False
 
 
 class Entry(BaseModel):
@@ -110,6 +113,8 @@ class Entry(BaseModel):
     fact_id: uuid.UUID
     text: str
     detail: str | None = None  # the institution and years, for education
+    hidden: bool = False
+    user_edited: bool = False
 
 
 class CVContent(BaseModel):
@@ -121,6 +126,27 @@ class CVContent(BaseModel):
     skills: list[Entry] = Field(default_factory=list)
     education: list[Entry] = Field(default_factory=list)
     languages: list[Entry] = Field(default_factory=list)
+
+    def visible(self) -> "CVContent":
+        """The CV as it's shown and downloaded: without what the user hid."""
+
+        def shown[T: Line | Entry](items: list[T]) -> list[T]:
+            return [item for item in items if not item.hidden]
+
+        return self.model_copy(
+            update={
+                "headline": self.headline if self.headline and not self.headline.hidden else None,
+                "summary": self.summary if self.summary and not self.summary.hidden else None,
+                "experiences": [
+                    e.model_copy(update={"bullets": shown(e.bullets)})
+                    for e in self.experiences
+                    if not e.hidden
+                ],
+                "skills": shown(self.skills),
+                "education": shown(self.education),
+                "languages": shown(self.languages),
+            }
+        )
 
 
 class Change(BaseModel):

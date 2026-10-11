@@ -28,7 +28,10 @@
   <p role="note" class="rounded-2xl bg-cream px-4 py-3 text-sm text-taupe-strong">{{ _("Essa vaga parece ser de fora da área de tecnologia. Você pode seguir normalmente; o Mentor só é mais afiado em vagas de tecnologia por enquanto.") }}</p>
   {% endif %}
   {% include "jobs/_fit.html" %}
+  {# Generating a CV is the page's main action: right below the fit summary, above the
+     requirement list, so it's within reach (D82). #}
   {% include "jobs/_cvs.html" %}
+  {% include "jobs/_requirements.html" %}
 </div>
 {% else %}
 <div id="job-body" role="status" class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">

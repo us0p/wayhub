@@ -123,7 +123,8 @@ async def job_state(request: Request, job_id: uuid.UUID, db: DB, user: CurrentUs
 async def fit_state(request: Request, job_id: uuid.UUID, db: DB, user: CurrentUser) -> Response:
     """Polled while the fit is analyzed; stops polling once it's done."""
     job = await _job(db, user, job_id)
-    return templates.TemplateResponse(request, "jobs/_fit.html", await _context(db, user, job))
+    context = await _context(db, user, job) | {"fit_fragment": True}
+    return templates.TemplateResponse(request, "jobs/_fit.html", context)
 
 
 @router.post("/{job_id}/compatibilidade", response_class=HTMLResponse)
@@ -137,7 +138,8 @@ async def redo_fit(
         await fit.request(db, job.id, user.id)
         await db.commit()
         await queue.analyze_fit(job.id)
-    return templates.TemplateResponse(request, "jobs/_fit.html", await _context(db, user, job))
+    context = await _context(db, user, job) | {"fit_fragment": True}
+    return templates.TemplateResponse(request, "jobs/_fit.html", context)
 
 
 @router.delete("/{job_id}")

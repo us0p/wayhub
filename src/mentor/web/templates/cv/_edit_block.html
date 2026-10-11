@@ -1,0 +1,107 @@
+{# One block of the CV editor (M9b, D81): the headline, the summary, an experience, or the
+   skills, education or languages. Every button swaps the whole block (`hx-target="this"` on
+   the section), so hiding an experience also hides its bullets. `editing` is the path of the
+   item whose form is open. #}
+{% set button = "rounded-full border border-moss bg-surface px-3 py-1.5 text-sm font-semibold transition active:scale-95" %}
+{% set base = "/curriculos/" ~ cv.id ~ "/itens/" %}
+
+{% macro badges(node) %}
+{% if node.hidden or node.user_edited %}
+<p class="mt-2 flex flex-wrap gap-2 text-xs">
+  {% if node.hidden %}<span class="rounded-full bg-surface px-2.5 py-1 text-taupe-strong ring-1 ring-moss/60">{{ _("Oculto") }}</span>{% endif %}
+  {% if node.user_edited %}<span class="rounded-full bg-sage/40 px-2.5 py-1 text-ink">{{ _("Editado por você") }}</span>{% endif %}
+</p>
+{% endif %}
+{% endmacro %}
+
+{% macro visibility(path, node, label) %}
+<button hx-post="{{ base ~ path }}/{{ 'mostrar' if node.hidden else 'ocultar' }}"
+        aria-label="{{ (_('Mostrar %(item)s', item=label) if node.hidden else _('Ocultar %(item)s', item=label)) }}"
+        class="{{ button }}">{{ _("Mostrar") if node.hidden else _("Ocultar") }}</button>
+{% endmacro %}
+
+{# A sentence: its edit form when open, else the text with its buttons. #}
+{% macro row(path, node, label, hideable=True, detail=None) %}
+{% if editing == path %}
+<form hx-post="{{ base ~ path }}" class="rounded-2xl bg-cream p-4 ring-2 ring-sage-strong/60">
+  <label class="block text-sm font-medium">{{ label }}
+    <textarea name="texto" rows="{{ 5 if path == 'summary' else 3 }}" lang="{{ content.language }}"
+              {% if errors.texto %}aria-invalid="true"{% endif %}
+              class="mt-1 w-full rounded-2xl border bg-surface px-4 py-3 text-base {{ 'border-danger' if errors.texto else 'border-moss' }}">{{ values.get("texto", "") }}</textarea>
+  </label>
+  {% if errors.texto %}<span role="alert" class="mt-1 block text-sm font-medium text-danger">{{ errors.texto }}</span>{% endif %}
+  <div class="mt-3 flex flex-wrap gap-3">
+    <button class="rounded-full bg-sage px-6 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Salvar") }}</button>
+    <button type="button" hx-get="{{ base ~ path }}" class="rounded-full border border-moss px-6 py-2.5 text-sm font-semibold">{{ _("Cancelar") }}</button>
+  </div>
+</form>
+{% else %}
+<div class="rounded-2xl bg-cream p-4">
+  <p lang="{{ content.language }}" class="text-sm {{ 'text-taupe-strong line-through' if node.hidden }}">{{ node.text }}</p>
+  {% if detail %}<p class="mt-1 text-xs text-taupe-strong">{{ detail }}</p>{% endif %}
+  {{ badges(node) }}
+  <div class="mt-3 flex flex-wrap gap-2">
+    {% if not node.hidden %}
+    <button hx-get="{{ base ~ path }}/editar" aria-label="{{ _('Editar %(item)s', item=label) }}" class="{{ button }}">{{ _("Editar") }}</button>
+    {% endif %}
+    {% if hideable %}{{ visibility(path, node, label) }}{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+<section id="cv-block-{{ key | replace('.', '-') }}" hx-target="this" hx-swap="outerHTML"
+         aria-labelledby="cv-block-{{ key | replace('.', '-') }}-title"
+         class="rounded-[var(--radius-card)] bg-surface p-4 shadow-sm ring-1 ring-moss/40 md:p-5">
+  {% set title_id = "cv-block-" ~ (key | replace(".", "-")) ~ "-title" %}
+  {% if key == "headline" %}
+  <h2 id="{{ title_id }}" class="mb-3 text-sm font-semibold uppercase tracking-wide text-taupe-strong">{{ _("Título") }}</h2>
+  {{ row("headline", content.headline, _("Título")) }}
+  {% elif key == "summary" %}
+  <h2 id="{{ title_id }}" class="mb-3 text-sm font-semibold uppercase tracking-wide text-taupe-strong">{{ _("Resumo") }}</h2>
+  {{ row("summary", content.summary, _("Resumo")) }}
+  {% elif key.startswith("experiences.") %}
+  {% set i = key.split(".")[1] | int %}
+  {% set entry = content.experiences[i] %}
+  {% set name = entry.company or entry.title.text %}
+  <div class="flex items-start justify-between gap-3">
+    <div class="min-w-0">
+      <p class="text-xs font-medium uppercase tracking-wide text-taupe-strong">{{ _("Experiência") }}</p>
+      <h2 id="{{ title_id }}" class="mt-1 font-semibold {{ 'text-taupe-strong line-through' if entry.hidden }}">{{ name }}</h2>
+      {% if periods[i] %}<p class="text-xs text-taupe-strong">{{ periods[i] }}</p>{% endif %}
+      {{ badges(entry) }}
+    </div>
+    <div class="shrink-0">{{ visibility(key, entry, name) }}</div>
+  </div>
+  {% if entry.hidden %}
+  <p class="mt-3 text-sm text-taupe-strong">{{ _("Esta experiência não aparece no currículo.") }}</p>
+  {% else %}
+  <div class="mt-4 space-y-3">
+    {{ row(key ~ ".title", entry.title, _("Cargo"), hideable=False) }}
+    {% for bullet in entry.bullets %}
+    {{ row(key ~ ".bullets." ~ loop.index0, bullet, _("Tópico %(n)s", n=loop.index)) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% elif key == "skills" %}
+  <h2 id="{{ title_id }}" class="text-sm font-semibold uppercase tracking-wide text-taupe-strong">{{ _("Habilidades") }}</h2>
+  <p class="mt-1 text-xs text-taupe-strong">{{ _("Toque numa habilidade para ocultar ou mostrar.") }}</p>
+  <ul class="mt-3 flex flex-wrap gap-2">
+    {% for skill in content.skills %}
+    <li>
+      <button hx-post="{{ base }}skills.{{ loop.index0 }}/{{ 'mostrar' if skill.hidden else 'ocultar' }}"
+              aria-pressed="{{ 'false' if skill.hidden else 'true' }}"
+              class="rounded-full px-3 py-1.5 text-sm transition active:scale-95 {{ 'bg-surface text-taupe-strong line-through ring-1 ring-moss/60' if skill.hidden else 'bg-sage text-ink' }}">{{ skill.text }}</button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {% set items = content.education if key == "education" else content.languages %}
+  <h2 id="{{ title_id }}" class="mb-3 text-sm font-semibold uppercase tracking-wide text-taupe-strong">{{ _("Formação") if key == "education" else _("Idiomas") }}</h2>
+  <div class="space-y-3">
+    {% for item in items %}
+    {{ row(key ~ "." ~ loop.index0, item, _("Formação") if key == "education" else _("Idioma"), detail=item.detail) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>

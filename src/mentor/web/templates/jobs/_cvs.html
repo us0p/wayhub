@@ -1,7 +1,7 @@
 {# CVs for a posting (M9, D16, D81): generate a version, and every version so far. #}
 {% import "cv/_labels.html" as C %}
 {% set gaps = fit and fit.tally(job.requirements).must.gap %}
-<section id="curriculos" aria-labelledby="cv-title" class="rounded-[var(--radius-card)] bg-ink p-5 text-cream md:p-6">
+<section id="curriculos"{% if oob %} hx-swap-oob="true"{% endif %} aria-labelledby="cv-title" class="rounded-[var(--radius-card)] bg-ink p-5 text-cream md:p-6">
   <h2 id="cv-title" class="text-lg font-semibold">{{ _("Currículo para esta vaga") }}</h2>
   {% if not cv_unlocked %}
   <p class="mt-3 text-sm">{{ _("Para gerar currículos, termine a entrevista com a Mari: o currículo só usa o que você contou.") }}</p>

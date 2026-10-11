@@ -21,7 +21,11 @@
   <div class="flex flex-wrap gap-3">
     <a href="/curriculos/{{ cv.id }}/pdf" download class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Baixar PDF") }}</a>
     <a href="/curriculos/{{ cv.id }}/docx" download class="inline-flex items-center justify-center rounded-full border border-moss bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition active:scale-95">{{ _("Baixar DOCX") }}</a>
+    <a href="/curriculos/{{ cv.id }}/editar" class="inline-flex items-center justify-center rounded-full border border-moss bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition active:scale-95">{{ _("Editar") }}</a>
   </div>
+  {% if edited %}
+  <p role="note" class="text-sm text-taupe-strong">{{ _("Você editou esta versão: o texto que você escreveu vai como está, e o que você ocultou não aparece.") }}</p>
+  {% endif %}
   {% include "cv/_document.html" %}
   <section aria-labelledby="changes-title" class="rounded-[var(--radius-card)] bg-cream p-5 md:p-6">
     <h2 id="changes-title" class="text-lg font-semibold">{{ _("O que a verificação mudou") }}</h2>
