@@ -118,6 +118,25 @@ async def test_stt_emits_one_scripted_transcript_per_chunk(fake_ai: FakeAI) -> N
     assert fake_ai.stt.languages == ["en-US"]
 
 
+async def test_stt_script_carries_over_to_the_next_stream_and_can_fail(fake_ai: FakeAI) -> None:
+    fake_ai.stt.transcripts = [Transcript("um", True), Transcript("dois", True), ValueError()]
+
+    first = [t async for t in fake_ai.stt.stream(_aiter(b"a"))]
+    second = [t async for t in fake_ai.stt.stream(_aiter(b"b"))]
+
+    assert first == [Transcript("um", True)]
+    assert second == [Transcript("dois", True)]
+    with pytest.raises(ValueError):
+        _ = [t async for t in fake_ai.stt.stream(_aiter(b"c"))]
+
+
+async def test_tts_can_be_scripted_to_fail(fake_ai: FakeAI) -> None:
+    fake_ai.tts.error = RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        _ = [a async for a in fake_ai.tts.stream(_aiter("Olá."))]
+
+
 async def test_tts_yields_one_sample_per_character_and_skips_blank_chunks(
     fake_ai: FakeAI,
 ) -> None:

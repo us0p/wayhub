@@ -24,7 +24,7 @@ from mentor.profile.models import (
     UserSkill,
     WorkMode,
 )
-from mentor.profile.service import stamps
+from mentor.profile.service import _fit, stamps
 
 from .helpers import login_and_consent
 
@@ -467,3 +467,13 @@ async def test_edits_require_login_and_csrf(client: AsyncClient, db: AsyncSessio
     await login_and_consent(client, "csrf@example.com")
     no_token = await client.post("/perfil/contato", data={"full_name": "Ana"})
     assert no_token.status_code == 403
+
+
+def test_patching_keeps_enums_as_enums() -> None:
+    """A StrEnum is a str, and the column-length clipping used to slice it into plain text;
+    the voice session reuses one DB session, so the next turn's prompt then failed on
+    `profile.seniority.value`."""
+    assert _fit(Profile, "seniority", Seniority.INTERN) is Seniority.INTERN
+    assert _fit(Profile, "full_name", "x" * 500) == "x" * 200  # plain strings still clipped
+    modes = _fit(Profile, "work_modes", [WorkMode.REMOTE])
+    assert isinstance(modes, list) and modes[0] is WorkMode.REMOTE  # enum list items too

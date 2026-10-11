@@ -7,6 +7,7 @@ never depend on scheduling order. Every call is recorded in `calls`. `FakeEmbedd
 words into buckets, so texts sharing words get similar vectors (enough for pgvector tests).
 """
 
+import asyncio
 import hashlib
 import math
 import re
@@ -98,6 +99,7 @@ class FakeChatModel(BaseChatModel):
 
     fake_script: FakeScript
     effort: Effort | None = None
+    word_delay: float = 0.0  # seconds between streamed words (to simulate a slow model)
 
     @property
     def _llm_type(self) -> str:
@@ -131,6 +133,8 @@ class FakeChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         for chunk in self._stream(messages, stop, None, **kwargs):
+            if self.word_delay:
+                await asyncio.sleep(self.word_delay)
             yield chunk
 
 
@@ -139,6 +143,7 @@ class FakeChatModels:
 
     def __init__(self) -> None:
         self.fake_script = FakeScript()
+        self.word_delay = 0.0  # see FakeChatModel.word_delay
 
     @property
     def calls(self) -> list[FakeCall]:
@@ -151,7 +156,9 @@ class FakeChatModels:
         self.fake_script.structured[schema].extend(replies)
 
     def chat(self, *, effort: Effort | None = None) -> Runnable[LanguageModelInput, BaseMessage]:
-        return FakeChatModel(fake_script=self.fake_script, effort=effort)
+        return FakeChatModel(
+            fake_script=self.fake_script, effort=effort, word_delay=self.word_delay
+        )
 
     def structured[M: BaseModel](
         self, schema: type[M], *, effort: Effort | None = None
@@ -189,9 +196,10 @@ class FakeEmbeddings(Embeddings):
 @dataclass
 class FakeSTT:
     """Emits the next scripted transcript for each audio chunk received; once the script is
-    exhausted, keeps consuming audio silently."""
+    exhausted, keeps consuming audio silently. The script is shared by successive streams
+    (stream rotation), and a scripted exception is raised in place of a transcript."""
 
-    transcripts: list[Transcript] = field(default_factory=list)
+    transcripts: list[Transcript | Exception] = field(default_factory=list)
     received: bytearray = field(default_factory=bytearray)
     languages: list[str] = field(default_factory=list)
 
@@ -199,19 +207,23 @@ class FakeSTT:
         self, audio: AsyncIterable[bytes], *, language: str = DEFAULT_LANGUAGE
     ) -> AsyncIterator[Transcript]:
         self.languages.append(language)
-        pending = deque(self.transcripts)
         async for chunk in audio:
             self.received.extend(chunk)
-            if pending:
-                yield pending.popleft()
+            if self.transcripts:
+                item = self.transcripts.pop(0)
+                if isinstance(item, Exception):
+                    raise item
+                yield item
 
 
 @dataclass
 class FakeTTS:
-    """Yields silence: 2 bytes (one PCM16 sample) per character of each text chunk."""
+    """Yields silence: 2 bytes (one PCM16 sample) per character of each text chunk.
+    With `error` set, raises it on the first chunk instead."""
 
     texts: list[str] = field(default_factory=list)
     voices: list[str | None] = field(default_factory=list)
+    error: Exception | None = None
 
     async def stream(
         self, text: AsyncIterable[str], *, voice: str | None = None
@@ -219,6 +231,8 @@ class FakeTTS:
         self.voices.append(voice)
         async for chunk in text:
             if chunk.strip():
+                if self.error is not None:
+                    raise self.error
                 self.texts.append(chunk)
                 yield b"\x00\x00" * len(chunk)
 

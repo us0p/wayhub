@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     google_cloud_project: str | None = None
     google_stt_location: str = "us"
     google_stt_model: str = "chirp_3"
+    google_stt_denoise: bool = True  # Speech v2 denoiser: background noise, not voices (D67)
+    # Silence Chirp 3 waits for before finalizing what the user said (D69).
+    google_stt_endpointing: Literal["standard", "short", "supershort"] = "short"
     google_tts_voice: str = "pt-BR-Chirp3-HD-Kore"
 
     @property

@@ -8,6 +8,7 @@ data.
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from enum import Enum
 from urllib.parse import urlsplit
 
 from langchain_core.embeddings import Embeddings
@@ -66,25 +67,45 @@ class Snapshot:
 
 
 async def snapshot(db: AsyncSession, user: User) -> Snapshot:
+    """The user's profile as stored. Always reloaded from the database: a voice session keeps
+    one DB session for many turns (and sessions don't expire on commit), so objects left in
+    its identity map by earlier turns can lag behind (bullets added since) or differ from
+    what was stored (D76)."""
+    fresh = {"populate_existing": True}
     experiences = await db.scalars(
         select(Experience)
         .where(Experience.user_id == user.id)
         .options(selectinload(Experience.bullets))
         .order_by(Experience.start_date.desc().nulls_last(), Experience.created_at)
+        .execution_options(**fresh)
     )
     education = await db.scalars(
-        select(Education).where(Education.user_id == user.id).order_by(Education.created_at)
+        select(Education)
+        .where(Education.user_id == user.id)
+        .order_by(Education.created_at)
+        .execution_options(**fresh)
     )
     languages = await db.scalars(
-        select(Language).where(Language.user_id == user.id).order_by(Language.created_at)
+        select(Language)
+        .where(Language.user_id == user.id)
+        .order_by(Language.created_at)
+        .execution_options(**fresh)
     )
-    links = await db.scalars(select(Link).where(Link.user_id == user.id).order_by(Link.created_at))
+    links = await db.scalars(
+        select(Link)
+        .where(Link.user_id == user.id)
+        .order_by(Link.created_at)
+        .execution_options(**fresh)
+    )
     user_skills = await db.scalars(
-        select(UserSkill).where(UserSkill.user_id == user.id).order_by(UserSkill.created_at)
+        select(UserSkill)
+        .where(UserSkill.user_id == user.id)
+        .order_by(UserSkill.created_at)
+        .execution_options(**fresh)
     )
     return Snapshot(
         user=user,
-        profile=await db.get(Profile, user.id),
+        profile=await db.get(Profile, user.id, populate_existing=True),
         experiences=list(experiences),
         education=list(education),
         languages=list(languages),
@@ -198,6 +219,8 @@ def _fit(model: type[Base], name: str, value: object) -> object:
     """Clip strings (and string list items) to their column's length, so one over-long value
     from the model doesn't fail the whole patch."""
     column_type = sa_inspect(model).columns[name].type
+    if isinstance(value, Enum):  # a StrEnum is a str: slicing it would turn it into plain text
+        return value
     if isinstance(value, str) and (length := getattr(column_type, "length", None)):
         return value[:length]
     if (
@@ -205,7 +228,7 @@ def _fit(model: type[Base], name: str, value: object) -> object:
         and isinstance(column_type, ARRAY)
         and (length := getattr(column_type.item_type, "length", None))
     ):
-        return [v[:length] if isinstance(v, str) else v for v in value]
+        return [v[:length] if isinstance(v, str) and not isinstance(v, Enum) else v for v in value]
     return value
 
 

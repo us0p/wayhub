@@ -16,3 +16,5 @@ dist/
 bin/tailwindcss
 src/mentor/web/static/css/app.css
 test-results/
+# Local compose additions (e.g. mounting Google credentials); never committed (D36).
+docker-compose.override.yml

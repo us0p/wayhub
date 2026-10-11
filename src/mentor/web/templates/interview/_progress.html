@@ -1,0 +1,4 @@
+{# Checklist progress sent over the voice WebSocket; voice.js swaps each element by id. #}
+{% from "components/chat.html" import progress_compact, progress_panel %}
+{{ progress_compact(progress) }}
+{{ progress_panel(progress) }}

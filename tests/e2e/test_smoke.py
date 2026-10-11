@@ -68,7 +68,7 @@ def _seed_profile(email: str) -> None:
         pool.submit(asyncio.run, seed()).result()
 
 
-def _sign_up(page: Page, base_url: str) -> str:
+def _sign_up(page: Page, base_url: str, plan: str | None = None) -> str:
     """Dev login (D42) + consent, as a fresh user each time. Returns the e-mail."""
     email = f"e2e-{uuid.uuid4().hex[:8]}@example.com"
     page.goto(base_url + "/")
@@ -76,6 +76,8 @@ def _sign_up(page: Page, base_url: str) -> str:
     page.get_by_role("link", name="Entrar como usuário de teste").click()
     page.get_by_label("E-mail").fill(email)
     page.get_by_label("Nome (opcional)").fill("Ana Souza")
+    if plan:  # the dev login defaults to the unlimited tester plan
+        page.locator("select[name=plan]").select_option(plan)
     page.get_by_role("button", name="Entrar").click()
     expect(page.get_by_role("heading", name="Antes de começar")).to_be_visible()
     page.get_by_role("checkbox").check()
@@ -236,3 +238,44 @@ def test_finished_interview_opens_a_modal_to_the_profile(
     expect(modal.get_by_text("Sua entrevista terminou!")).to_be_visible()
     modal.get_by_role("link", name="Conferir meu perfil").click()
     expect(page.get_by_role("heading", name="Seu perfil")).to_be_visible()
+
+
+def test_voice_mode_starts_and_falls_back_to_text(
+    viewport_page: tuple[str, Page], base_url: str
+) -> None:
+    """Voice mode with Chromium's fake mic and the fake STT/TTS: the worklet, WebSocket and
+    panel come up without console errors (CSP), and ending it returns to the text composer."""
+    _, page = viewport_page
+
+    _sign_up(page, base_url, plan="free")  # testers have unlimited voice: no minutes shown
+    page.get_by_role("link", name="Entrevista", exact=True).click()
+    page.wait_for_load_state("load")
+
+    page.get_by_role("button", name="Conversar por voz").click()
+    expect(page.get_by_text("Ouvindo…")).to_be_visible()  # the server said ready
+    expect(page.get_by_text("30 min de voz restantes")).to_be_visible()
+    expect(page.get_by_label("Sua resposta")).to_be_hidden()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    page.get_by_role("button", name="Silenciar").click()
+    expect(page.get_by_text("Microfone silenciado")).to_be_visible()
+
+    page.get_by_role("button", name="Voltar ao texto").click()
+    expect(page.get_by_label("Sua resposta")).to_be_visible()
+    expect(page.get_by_role("button", name="Voltar ao texto")).to_be_hidden()
+
+
+def test_voice_failure_shows_a_passing_toast_and_keeps_the_chat(
+    viewport_page: tuple[str, Page], base_url: str
+) -> None:
+    """After a voice session gave up (D73) the chat is back, with a toast that goes away by
+    itself and never blocks the composer."""
+    _, page = viewport_page
+    _sign_up(page, base_url)
+    page.goto(base_url + "/entrevista?voz=connection")
+    page.wait_for_load_state("load")
+
+    toast = page.get_by_role("status").filter(has_text="Não consegui restabelecer a conexão")
+    expect(toast).to_be_visible()
+    page.get_by_label("Sua resposta").fill("Posso digitar com o aviso na tela.")  # not blocked
+    expect(toast).to_be_hidden(timeout=10_000)  # passing, not permanent

@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
@@ -46,10 +47,8 @@ def checkpointer() -> BaseCheckpointSaver[str]:
 
 
 @pytest.fixture
-async def client(
-    db: AsyncSession, fake_ai: FakeAI, checkpointer: BaseCheckpointSaver[str]
-) -> AsyncIterator[AsyncClient]:
-    """App client on the test transaction, with the test's `fake_ai` and `checkpointer`."""
+def app(db: AsyncSession, fake_ai: FakeAI, checkpointer: BaseCheckpointSaver[str]) -> FastAPI:
+    """The app on the test transaction, with the test's `fake_ai` and `checkpointer`."""
     app = create_app()
 
     async def _session() -> AsyncIterator[AsyncSession]:
@@ -58,5 +57,10 @@ async def client(
     app.dependency_overrides[get_session] = _session
     app.dependency_overrides[get_ai] = lambda: fake_ai
     app.dependency_overrides[get_checkpointer] = lambda: checkpointer
+    return app
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

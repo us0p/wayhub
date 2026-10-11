@@ -1,11 +1,12 @@
 import pytest
+from google.auth.exceptions import DefaultCredentialsError
 
 from mentor.ai.adapters.fake import FakeChatModels, FakeEmbeddings, FakeSTT, FakeTTS
 from mentor.ai.adapters.gemini import GeminiChatModels
 from mentor.ai.adapters.google_speech import GoogleSTT, GoogleTTS
 from mentor.ai.embeddings import NormalizedEmbeddings
 from mentor.ai.ports import AIConfigurationError
-from mentor.ai.registry import build_ai, get_ai
+from mentor.ai.registry import build_ai, check_google_credentials, get_ai
 from mentor.settings import Settings
 
 BASE = {"database_url": "postgresql+asyncpg://u@h/db", "secret_key": "x" * 32, "app_env": "test"}
@@ -77,3 +78,29 @@ def test_vertex_backend_needs_a_project_not_an_api_key() -> None:
 def test_missing_credentials_fail_with_a_clear_error() -> None:
     with pytest.raises(AIConfigurationError, match="GEMINI_API_KEY, GOOGLE_CLOUD_PROJECT"):
         build_ai(_settings(**REAL))
+
+
+def test_credentials_are_not_looked_up_for_fakes_or_an_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def lookup() -> None:
+        raise AssertionError("ADC looked up")
+
+    monkeypatch.setattr("google.auth.default", lookup)
+
+    check_google_credentials(_settings(**FAKE))
+    check_google_credentials(
+        _settings(**{**FAKE, "ai_llm": "gemini", "ai_embedder": "gemini"}, gemini_api_key="k")
+    )
+
+
+def test_missing_speech_credentials_fail_with_a_clear_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def lookup() -> None:
+        raise DefaultCredentialsError("no credentials")
+
+    monkeypatch.setattr("google.auth.default", lookup)
+
+    with pytest.raises(AIConfigurationError, match="Application Default Credentials"):
+        check_google_credentials(_settings(**{**FAKE, "ai_stt": "google"}))

@@ -19,8 +19,10 @@ RUN tailwindcss -i src/mentor/web/static/css/input.css -o src/mentor/web/static/
 # --- Python app ---
 FROM python:${PYTHON_VERSION}-slim AS app
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
+# NO_GCE_CHECK: we never run on Google Compute Engine (D20), so google-auth must not probe its
+# metadata server when credentials are missing; that probe made a voice session hang ~12 s (D69).
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv \
-    PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1
+    PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1 NO_GCE_CHECK=true
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project
