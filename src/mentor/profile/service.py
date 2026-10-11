@@ -123,15 +123,15 @@ def _month(value: date | None) -> str:
     return value.strftime("%m/%Y") if value else "?"
 
 
-def render(snap: Snapshot) -> str:
-    """The profile as compact pt-BR text for prompts, with refs."""
+def render(snap: Snapshot, *, contact: bool = True) -> str:
+    """The profile as compact pt-BR text for prompts, with refs. `contact=False` leaves out the
+    name, e-mail and phone, for prompts that don't need them (the fit warning)."""
     lines: list[str] = []
     p = snap.profile
     if p is not None:
-        contact = [
-            ("Nome", p.full_name),
-            ("E-mail", p.email),
-            ("Telefone", p.phone),
+        identity = [("Nome", p.full_name), ("E-mail", p.email), ("Telefone", p.phone)]
+        fields = [
+            *(identity if contact else []),
             ("Cidade", ", ".join(x for x in (p.city, p.state, p.country) if x) or None),
             ("Resumo", p.headline),
             ("Cargos-alvo", ", ".join(p.target_roles) or None),
@@ -145,7 +145,7 @@ def render(snap: Snapshot) -> str:
                 else ("sim" if p.open_to_relocation else "não"),
             ),
         ]
-        lines += [f"{label}: {value}" for label, value in contact if value]
+        lines += [f"{label}: {value}" for label, value in fields if value]
     for exp in snap.experiences:
         end = "atual" if exp.is_current else _month(exp.end_date)
         extra = ", ".join(

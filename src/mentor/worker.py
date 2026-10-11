@@ -23,7 +23,8 @@ WORKER_CONCURRENCY = 4
 # No connection parameters here: `opened()` hands it a pool built from the settings, so
 # importing this module (the web app does) never needs the database.
 app = procrastinate.App(
-    connector=procrastinate.PsycopgConnector(), import_paths=["mentor.jobs.tasks"]
+    connector=procrastinate.PsycopgConnector(),
+    import_paths=["mentor.jobs.tasks", "mentor.fit.tasks"],
 )
 
 

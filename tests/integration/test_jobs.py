@@ -57,9 +57,13 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 class RecordingQueue:
     def __init__(self) -> None:
         self.queued: list[uuid.UUID] = []
+        self.fits: list[uuid.UUID] = []
 
     async def import_job(self, job_id: uuid.UUID) -> None:
         self.queued.append(job_id)
+
+    async def analyze_fit(self, job_id: uuid.UUID) -> None:
+        self.fits.append(job_id)
 
 
 @pytest.fixture
@@ -238,7 +242,7 @@ async def test_processing_reads_the_posting_and_stores_its_requirements(
     page = (await client.get(f"/vagas/{job.id}")).text
     assert "O que a vaga exige" in page and "5 anos de Python" in page
     assert "Mínimo de 5 anos" in page and "Kubernetes" in page and "Remoto" in page
-    assert 'hx-trigger="every 2s"' not in page  # done: no more polling
+    assert f'hx-get="/vagas/{job.id}/estado"' not in page  # read: no more polling the posting
     [call] = [c for c in fake_ai.chat.calls if c.schema is ParsedJob]
     prompt = call.messages[-1].text
     assert prompt.startswith("<vaga>") and POSTING in prompt  # untrusted data, tagged
@@ -259,7 +263,7 @@ async def test_the_job_page_polls_while_the_posting_is_being_read(
 
     assert f'hx-get="/vagas/{job.id}/estado" hx-trigger="every 2s"' in waiting.text
     assert "Lendo a vaga" in waiting.text
-    assert 'id="job-body"' in state.text and "every 2s" not in state.text
+    assert 'id="job-body"' in state.text and "/estado" not in state.text
     assert "Desenvolvedora Python Sênior" in state.text
 
 

@@ -1,0 +1,99 @@
+{# The fit warning (M8, D13, D80): how the profile compares with each requirement of the
+   posting. While the analysis runs, this fragment polls itself. It is factual and never
+   blocks anything. #}
+{% import "jobs/_labels.html" as J %}
+{% macro redo(label) %}
+<button hx-post="/vagas/{{ job.id }}/compatibilidade" hx-target="#job-fit" hx-swap="outerHTML"
+        class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ label }}</button>
+{% endmacro %}
+{% macro breakdown(t) %}
+{% if t.partial or t.gap or t.unknown %}
+<ul class="mt-2 flex flex-wrap gap-2 text-xs">
+  {% if t.partial %}<li class="rounded-full px-2.5 py-1 {{ J.verdict_badge.partial }}">{{ ngettext("%(num)s em parte", "%(num)s em parte", t.partial) }}</li>{% endif %}
+  {% if t.gap %}<li class="rounded-full px-2.5 py-1 {{ J.verdict_badge.gap }}">{{ ngettext("%(num)s lacuna", "%(num)s lacunas", t.gap) }}</li>{% endif %}
+  {% if t.unknown %}<li class="rounded-full px-2.5 py-1 {{ J.verdict_badge.unknown }}">{{ ngettext("%(num)s sem informação", "%(num)s sem informação", t.unknown) }}</li>{% endif %}
+</ul>
+{% endif %}
+{% endmacro %}
+{% set report = fit.report %}
+{% set verdicts = fit.verdicts() %}
+<div id="job-fit" class="space-y-6"
+     {% if fit.waiting %}hx-get="/vagas/{{ job.id }}/compatibilidade" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <section aria-labelledby="fit-title" class="rounded-[var(--radius-card)] bg-surface p-5 shadow-sm ring-1 ring-moss/40 md:p-6">
+    <h2 id="fit-title" class="text-lg font-semibold">{{ _("Você e a vaga") }}</h2>
+    {% if fit.waiting %}
+    <div role="status" aria-live="polite" class="mt-3 flex items-center gap-3">
+      <span class="h-3 w-3 shrink-0 animate-pulse rounded-full bg-sage" aria-hidden="true"></span>
+      <p class="text-sm">{{ _("Comparando a vaga com o seu perfil…") }}</p>
+    </div>
+    {% elif fit.stuck or report.status == "failed" %}
+    <p role="status" class="mt-3 text-sm">{{ _("Não consegui comparar a vaga com o seu perfil agora.") }}</p>
+    {{ redo(_("Tentar de novo")) }}
+    {% elif report.status == "no_profile" %}
+    <p class="mt-3 text-sm">{{ _("Para comparar a vaga com você, preciso conhecer o seu perfil. Conte sobre você na entrevista com a Mari.") }}</p>
+    {% if fit.stale %}
+    {{ redo(_("Comparar com meu perfil")) }}
+    {% else %}
+    <a href="/entrevista" class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Começar entrevista") }}</a>
+    {% endif %}
+    {% else %}
+    {% set tally = fit.tally(job.requirements) %}
+    {% if tally.must.total %}
+    <p class="mt-3 text-sm">{{ ngettext("Você atende %(met)s de %(num)s exigência da vaga.", "Você atende %(met)s de %(num)s exigências da vaga.", tally.must.total, met=tally.must.met) }}</p>
+    {{ breakdown(tally.must) }}
+    {% endif %}
+    {% if tally.nice.total %}
+    <p class="mt-3 text-sm">{{ ngettext("E %(met)s de %(num)s diferencial.", "E %(met)s de %(num)s diferenciais.", tally.nice.total, met=tally.nice.met) if tally.must.total else ngettext("Você atende %(met)s de %(num)s diferencial.", "Você atende %(met)s de %(num)s diferenciais.", tally.nice.total, met=tally.nice.met) }}</p>
+    {{ breakdown(tally.nice) }}
+    {% endif %}
+    {% if not job.requirements %}
+    <p class="mt-3 text-sm">{{ _("A vaga não lista requisitos para comparar com o seu perfil.") }}</p>
+    {% endif %}
+    {% if not fit.interview_complete %}
+    <p role="note" class="mt-4 rounded-2xl bg-cream px-4 py-3 text-sm">
+      {{ _("Sua entrevista ainda não terminou: algumas lacunas podem ser só coisas que você ainda não contou.") }}
+      <a href="/entrevista" class="font-medium text-sage-strong underline underline-offset-4">{{ _("Continuar a entrevista") }}</a>
+    </p>
+    {% endif %}
+    {% if fit.stale %}
+    <p role="note" class="mt-4 text-sm text-taupe-strong">{{ _("Seu perfil mudou desde esta análise.") }}</p>
+    {{ redo(_("Refazer análise")) }}
+    {% endif %}
+    <p class="mt-4 text-xs text-taupe-strong">{{ _("É só um aviso: quem decide se vale se candidatar é você.") }}</p>
+    {% endif %}
+  </section>
+  {% for importance, title, empty in [
+    ("must", _("O que a vaga exige"), _("A vaga não lista requisitos obrigatórios.")),
+    ("nice", _("Diferenciais"), _("A vaga não lista diferenciais.")),
+  ] %}
+  {% set items = job.requirements | selectattr("importance", "equalto", importance) | list %}
+  <section aria-labelledby="req-{{ importance }}">
+    <h2 id="req-{{ importance }}" class="text-lg font-semibold">{{ title }}</h2>
+    {% if items %}
+    <ul class="mt-3 space-y-2">
+      {% for req in items %}
+      {% set item = verdicts.get(req.id) %}
+      <li class="rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-moss/40">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm">{{ req.text }}</p>
+            {% if req.min_years %}<p class="mt-1 text-xs text-taupe-strong">{{ _("Mínimo de %(n)s anos", n=req.min_years | round(1) | replace(".0", "")) }}</p>{% endif %}
+          </div>
+          {% if item %}
+          <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium {{ J.verdict_badge[item.verdict.value] }}">{{ J.verdict[item.verdict.value] }}</span>
+          {% else %}
+          <span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-taupe-strong">{{ J.kind[req.kind.value] }}</span>
+          {% endif %}
+        </div>
+        {% if item %}
+        <p class="mt-2 border-t border-moss/40 pt-2 text-sm text-taupe-strong">{{ item.message or _("Não encontrei isso no seu perfil para confirmar.") }}</p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="mt-3 text-sm text-taupe-strong">{{ empty }}</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
