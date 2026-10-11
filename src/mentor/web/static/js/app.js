@@ -75,3 +75,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const message = document.getElementById("toast")?.dataset.show;
   if (message) window.showToast(message, 7);
 });
+
+// File inputs with data-file-list="<ul id>" list the chosen files' names (the input is hidden
+// behind a styled label). textContent only: names are never parsed as HTML.
+document.addEventListener("change", (event) => {
+  const input = event.target;
+  const list = input.dataset?.fileList && document.getElementById(input.dataset.fileList);
+  if (!list) return;
+  list.replaceChildren(
+    ...[...input.files].map((file) => {
+      const item = document.createElement("li");
+      item.textContent = `📎 ${file.name}`;
+      return item;
+    }),
+  );
+});

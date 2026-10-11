@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title or _("Vaga") }} · Mentor{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <div class="flex items-center justify-between gap-3">
+    <a href="/vagas" class="text-sm font-medium text-sage-strong underline underline-offset-4">{{ _("Vagas e CVs") }}</a>
+    <button hx-delete="/vagas/{{ job.id }}" hx-trigger="confirmed"
+            data-confirm="{{ _('Excluir esta vaga? Essa ação não pode ser desfeita.') }}"
+            class="rounded-full border border-moss bg-surface px-4 py-1.5 text-sm font-medium text-danger transition active:scale-95">{{ _("Excluir vaga") }}</button>
+  </div>
+  {% if job.source_url %}
+  <p class="mt-4 truncate text-xs text-taupe-strong">{{ _("Importada de") }} <a href="{{ job.source_url }}" rel="noopener noreferrer nofollow" target="_blank" class="underline underline-offset-4">{{ job.source_url }}</a></p>
+  {% endif %}
+  {% include "jobs/_body.html" %}
+</div>
+{% endblock %}

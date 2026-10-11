@@ -104,9 +104,10 @@ jobs:
           ./tailwindcss -i src/mentor/web/static/css/input.css -o src/mentor/web/static/css/app.css --minify
       - run: uv run playwright install --with-deps chromium
       - run: uv run alembic upgrade head
-      - name: Start server
+      - name: Start server and worker
         run: |
           uv run uvicorn --factory mentor.main:create_app --port 8000 &
+          uv run python -m mentor worker &
           timeout 30 bash -c 'until curl -sf localhost:8000/health; do sleep 1; done'
       - run: uv run pytest -m e2e --base-url http://localhost:8000 -p no:cacheprovider tests/e2e
 
@@ -123,3 +124,10 @@ jobs:
           push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Build the worker image (app + Chromium, D78)
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          context: .
+          target: worker
+          push: false
+          cache-from: type=gha

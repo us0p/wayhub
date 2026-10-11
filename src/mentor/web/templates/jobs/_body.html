@@ -1,0 +1,69 @@
+{# What the job page shows for the posting's status. While the worker reads it, this fragment
+   polls itself and swaps in the result once the status changes (D78). #}
+{% import "jobs/_labels.html" as J %}
+{% import "profile/_labels.html" as L %}
+{% if job.status in waiting %}
+<div id="job-body" hx-get="/vagas/{{ job.id }}/estado" hx-trigger="every 2s" hx-swap="outerHTML"
+     role="status" aria-live="polite" class="mt-6 rounded-[var(--radius-card)] bg-ink p-6 text-cream">
+  <div class="flex items-center gap-3">
+    <span class="h-3 w-3 shrink-0 animate-pulse rounded-full bg-sage" aria-hidden="true"></span>
+    <p class="font-semibold">{{ _("Lendo a vaga…") }}</p>
+  </div>
+  <p class="mt-2 text-sm text-moss">{{ _("Isso costuma levar menos de um minuto. Pode sair desta página: a vaga fica salva em Vagas e CVs.") }}</p>
+</div>
+{% elif job.status == "ready" %}
+<div id="job-body" class="mt-6 space-y-6">
+  <section class="rounded-[var(--radius-card)] bg-ink p-5 text-cream md:p-6">
+    <h2 class="text-xl font-semibold">{{ job.title or _("Vaga sem título") }}</h2>
+    {% if job.company %}<p class="mt-1 text-sm text-moss">{{ job.company }}</p>{% endif %}
+    <ul class="mt-4 flex flex-wrap gap-2 text-xs" aria-label="{{ _('Detalhes da vaga') }}">
+      {% if job.location %}<li class="rounded-full bg-cream/10 px-3 py-1">{{ job.location }}</li>{% endif %}
+      {% if job.work_mode %}<li class="rounded-full bg-cream/10 px-3 py-1">{{ L.work_mode[job.work_mode.value] }}</li>{% endif %}
+      {% if job.seniority %}<li class="rounded-full bg-cream/10 px-3 py-1">{{ L.seniority[job.seniority.value] }}</li>{% endif %}
+      {% if job.language and not job.language.lower().startswith("pt") %}<li class="rounded-full bg-cream/10 px-3 py-1">{{ _("Vaga em %(lang)s", lang=job.language) }}</li>{% endif %}
+    </ul>
+    {% if job.summary %}<p class="mt-4 text-sm leading-relaxed">{{ job.summary }}</p>{% endif %}
+  </section>
+  {% if job.is_tech == false %}
+  <p role="note" class="rounded-2xl bg-cream px-4 py-3 text-sm text-taupe-strong">{{ _("Essa vaga parece ser de fora da área de tecnologia. Você pode seguir normalmente; o Mentor só é mais afiado em vagas de tecnologia por enquanto.") }}</p>
+  {% endif %}
+  {% for importance, title, empty in [
+    ("must", _("O que a vaga exige"), _("A vaga não lista requisitos obrigatórios.")),
+    ("nice", _("Diferenciais"), _("A vaga não lista diferenciais.")),
+  ] %}
+  {% set items = job.requirements | selectattr("importance", "equalto", importance) | list %}
+  <section aria-labelledby="req-{{ importance }}">
+    <h2 id="req-{{ importance }}" class="text-lg font-semibold">{{ title }}</h2>
+    {% if items %}
+    <ul class="mt-3 space-y-2">
+      {% for req in items %}
+      <li class="flex items-start justify-between gap-3 rounded-2xl bg-surface p-4 shadow-sm ring-1 ring-moss/40">
+        <div class="min-w-0">
+          <p class="text-sm">{{ req.text }}</p>
+          {% if req.min_years %}<p class="mt-1 text-xs text-taupe-strong">{{ _("Mínimo de %(n)s anos", n=req.min_years | round(1) | replace(".0", "")) }}</p>{% endif %}
+        </div>
+        <span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-taupe-strong">{{ J.kind[req.kind.value] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="mt-3 text-sm text-taupe-strong">{{ empty }}</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<div id="job-body" role="status" class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">
+  {% if job.status == "needs_manual" %}
+  <p class="font-semibold">{{ J.manual_reasons.get(job.status_reason, _("Não consegui ler essa vaga.")) }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Cole o texto da vaga ou envie prints do anúncio, que eu leio daqui.") }}</p>
+  {% elif job.status == "not_a_job" %}
+  <p class="font-semibold">{{ _("Isso não parece ser uma vaga de emprego.") }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Confira o link ou o arquivo e tente de novo com o anúncio da vaga.") }}</p>
+  {% else %}
+  <p class="font-semibold">{{ _("Não consegui ler essa vaga agora.") }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Tente importar de novo daqui a pouco. Se continuar, cole o texto da vaga.") }}</p>
+  {% endif %}
+  <a href="/vagas/nova" class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Importar de novo") }}</a>
+</div>
+{% endif %}

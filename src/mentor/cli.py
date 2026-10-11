@@ -3,6 +3,7 @@
 python -m mentor show EMAIL
 python -m mentor set-plan EMAIL {free,tester,admin}
 python -m mentor set-quota EMAIL KIND {<int>,unlimited,default}
+python -m mentor worker            # the task queue worker (D78)
 """
 
 import argparse
@@ -70,8 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
     quota.add_argument("email")
     quota.add_argument("kind", choices=[k.value for k in QuotaKind])
     quota.add_argument("value", help="<int> | unlimited | default")
+    sub.add_parser("worker", help="run the task queue worker")
     return parser
 
 
 def main(argv: list[str] | None = None) -> None:
-    asyncio.run(_run(build_parser().parse_args(argv)))
+    args = build_parser().parse_args(argv)
+    if args.command == "worker":
+        from mentor import worker
+
+        asyncio.run(worker.run())
+    else:
+        asyncio.run(_run(args))

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% import "jobs/_labels.html" as J %}
+{% block title %}{{ _("Vagas e CVs") }} · Mentor{% endblock %}
+{% block content %}
+<header class="flex items-end justify-between gap-3">
+  <h1 class="text-2xl font-semibold md:text-3xl">{{ _("Vagas e CVs") }}</h1>
+  <a href="/vagas/nova" class="inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Nova vaga") }}</a>
+</header>
+{% if jobs %}
+<ul class="mt-6 space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
+  {% for job in jobs %}
+  <li>
+    <a href="/vagas/{{ job.id }}" class="block h-full rounded-[var(--radius-card)] bg-surface p-5 shadow-sm ring-1 ring-moss/40 transition active:scale-[.98]">
+      <div class="flex items-start justify-between gap-3">
+        <p class="min-w-0 font-semibold">{{ job.title or (_("Nova vaga") if job.status in waiting else _("Vaga sem título") if job.status == "ready" else _("Vaga não lida")) }}</p>
+        {% if job.status != "ready" %}<span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-taupe-strong">{{ J.status[job.status.value] }}</span>{% endif %}
+      </div>
+      {% if job.company %}<p class="mt-1 text-sm text-taupe-strong">{{ job.company }}</p>{% endif %}
+      <p class="mt-2 text-xs text-taupe-strong">{{ J.source[job.source.value] }} · {{ job.created_at | local_date }}</p>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">
+  <p class="font-semibold">{{ _("Nenhuma vaga ainda") }}</p>
+  <p class="mt-1 text-sm text-taupe-strong">{{ _("Importe uma vaga pelo link, texto, prints ou PDF para ver o que ela pede e, depois, gerar um CV sob medida.") }}</p>
+</div>
+{% endif %}
+{% endblock %}

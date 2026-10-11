@@ -1,0 +1,29 @@
+{# The import form (D78): one field for a link or the pasted posting, plus attachments. Sent
+   with htmx (multipart), so the CSRF header goes along; errors re-render this fragment. #}
+{% import "jobs/_labels.html" as J %}
+<form id="job-form" hx-post="/vagas" hx-encoding="multipart/form-data" hx-target="this" hx-swap="outerHTML"
+      hx-disabled-elt="find button[type=submit]" class="mt-6 space-y-4">
+  <div>
+    <label for="entrada" class="text-sm font-medium">{{ _("Link ou texto da vaga") }}</label>
+    <textarea id="entrada" name="entrada" rows="6" maxlength="50000"
+              placeholder="{{ _('Cole aqui o link do anúncio ou o texto completo da vaga…') }}"
+              {% if error %}aria-invalid="true" aria-describedby="job-form-error"{% endif %}
+              class="mt-2 block w-full resize-y rounded-3xl border border-moss bg-surface px-4 py-3 text-sm focus:border-sage-strong focus:outline-none">{{ text }}</textarea>
+  </div>
+  <div>
+    <label for="arquivos" class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-moss bg-surface px-4 py-2.5 text-sm font-medium transition active:scale-95 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sage-strong">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg>
+      {{ _("Anexar prints ou PDF") }}
+      <input id="arquivos" name="arquivos" type="file" multiple data-file-list="job-files"
+             accept="image/png,image/jpeg,image/webp,application/pdf" class="sr-only">
+    </label>
+    <p class="mt-2 text-xs text-taupe-strong">{{ _("Até 5 prints do mesmo anúncio ou 1 PDF, com até 10 MB cada. Os arquivos são apagados depois da leitura.") }}</p>
+    <ul id="job-files" class="mt-2 space-y-1 text-xs text-ink"></ul>
+  </div>
+  {% if error %}
+  <p id="job-form-error" role="alert" class="rounded-2xl bg-cream px-4 py-3 text-sm text-danger">{{ J.form_errors[error] }}</p>
+  {% endif %}
+  <div class="flex justify-end">
+    <button type="submit" class="rounded-full bg-sage px-6 py-3 text-sm font-semibold text-ink shadow transition active:scale-95 disabled:opacity-50">{{ _("Importar vaga") }}</button>
+  </div>
+</form>
