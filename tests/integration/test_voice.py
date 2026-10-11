@@ -502,6 +502,42 @@ async def test_speech_synthesis_failing_three_times_falls_back_and_keeps_the_rep
     assert (await _turns(db, user))[-1].text == "Resposta de teste."
 
 
+async def test_a_reply_that_fails_before_any_text_is_generated_again(
+    app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
+) -> None:
+    """A failed reply used to end voice mode at once; it gets the engine's attempts first (D76)."""
+    user = await _user(client, db)
+    fake_ai.stt.transcripts = [Transcript("Sou dev.", is_final=True)]
+    fake_ai.chat.script(AIProviderError("503"), "Legal! Há quanto tempo?")
+
+    async with _ws(app, client) as ws:
+        await ws.receive()
+        await ws.send_bytes(CHUNK)
+        received = await ws.receive_until(has_event("agent_done"))
+        await ws.send_json({"type": "end"})
+        ended = await ws.receive_until(has_event("end"))
+
+    assert "".join(e["text"] for e in events(received, "agent_text")) == "Legal! Há quanto tempo?"
+    assert events(ended, "end") == [{"type": "end", "reason": "ended"}]
+    assert (await _turns(db, user))[-1].text == "Legal! Há quanto tempo?"
+
+
+async def test_a_reply_failing_every_attempt_falls_back_to_text(
+    app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
+) -> None:
+    await _user(client, db)
+    fake_ai.stt.transcripts = [Transcript("Sou dev.", is_final=True)]
+    fake_ai.chat.script(*[AIProviderError("503")] * 3)
+
+    async with _ws(app, client) as ws:
+        await ws.receive()
+        await ws.send_bytes(CHUNK)
+        received = await ws.receive_until(has_event("end"))
+
+    assert events(received, "end") == [{"type": "end", "reason": "failure"}]
+    assert not events(received, "agent_text")
+
+
 async def test_an_unanswered_turn_is_answered_when_voice_starts(
     app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
 ) -> None:

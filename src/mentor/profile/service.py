@@ -67,25 +67,45 @@ class Snapshot:
 
 
 async def snapshot(db: AsyncSession, user: User) -> Snapshot:
+    """The user's profile as stored. Always reloaded from the database: a voice session keeps
+    one DB session for many turns (and sessions don't expire on commit), so objects left in
+    its identity map by earlier turns can lag behind (bullets added since) or differ from
+    what was stored (D76)."""
+    fresh = {"populate_existing": True}
     experiences = await db.scalars(
         select(Experience)
         .where(Experience.user_id == user.id)
         .options(selectinload(Experience.bullets))
         .order_by(Experience.start_date.desc().nulls_last(), Experience.created_at)
+        .execution_options(**fresh)
     )
     education = await db.scalars(
-        select(Education).where(Education.user_id == user.id).order_by(Education.created_at)
+        select(Education)
+        .where(Education.user_id == user.id)
+        .order_by(Education.created_at)
+        .execution_options(**fresh)
     )
     languages = await db.scalars(
-        select(Language).where(Language.user_id == user.id).order_by(Language.created_at)
+        select(Language)
+        .where(Language.user_id == user.id)
+        .order_by(Language.created_at)
+        .execution_options(**fresh)
     )
-    links = await db.scalars(select(Link).where(Link.user_id == user.id).order_by(Link.created_at))
+    links = await db.scalars(
+        select(Link)
+        .where(Link.user_id == user.id)
+        .order_by(Link.created_at)
+        .execution_options(**fresh)
+    )
     user_skills = await db.scalars(
-        select(UserSkill).where(UserSkill.user_id == user.id).order_by(UserSkill.created_at)
+        select(UserSkill)
+        .where(UserSkill.user_id == user.id)
+        .order_by(UserSkill.created_at)
+        .execution_options(**fresh)
     )
     return Snapshot(
         user=user,
-        profile=await db.get(Profile, user.id),
+        profile=await db.get(Profile, user.id, populate_existing=True),
         experiences=list(experiences),
         education=list(education),
         languages=list(languages),

@@ -446,11 +446,21 @@ class VoiceSession:
             return turn
 
     async def _reply(self, turn: InterviewTurn) -> None:
+        """Answer `turn`. A reply that fails before any of it reached the user is generated
+        again, within the engine's attempts per turn (D58, D76); one that fails midway, or
+        that is out of attempts, ends voice mode (the text page offers a retry)."""
+        while not await self._reply_once(turn):
+            log.info("voice reply failed before any text; generating it again")
+
+    async def _reply_once(self, turn: InterviewTurn) -> bool:
+        """False if the reply failed before any text and may be tried again."""
         splitter = SentenceSplitter()
+        said = False
         async with contextlib.aclosing(self.engine.respond(self.interview, turn)) as events:
             async for event in events:
                 match event:
                     case ReplyChunk(text):
+                        said = True
                         await self.out.event(AgentText(text))
                         for sentence in splitter.feed(text):
                             self._say(sentence)
@@ -463,8 +473,11 @@ class VoiceSession:
                             if speech is not None:  # let the goodbye be heard
                                 await asyncio.wait({speech})
                             raise _Stop(EndReason.COMPLETED)
-                    case ReplyFailed():
+                    case ReplyFailed(retryable):
+                        if retryable and not said:
+                            return False
                         raise _Stop(EndReason.FAILURE)
+        return True
 
     # -- text to speech ------------------------------------------------------------------
 

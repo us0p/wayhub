@@ -634,3 +634,39 @@ async def test_a_failed_save_releases_the_turn_and_undoes_the_profile_changes(
     assert events[-1] == ReplyFailed()  # after the streamed chunks: the UI shows a retry
     assert turn.reply_started_at is None
     assert (await profile_service.snapshot(db, user)).experiences == []
+
+
+async def test_a_long_lived_session_sees_every_fact_saved_in_earlier_turns(
+    interviewer: InterviewEngine, fake_ai: FakeAI, db: AsyncSession, user: User
+) -> None:
+    """Voice keeps one DB session for the whole conversation (and sessions don't expire on
+    commit), so each turn must read the profile as stored, not objects left in memory by
+    earlier turns: those may differ from what the database holds (an enum written as a
+    plain str failed the next turn's prompt in a real session)."""
+    interview = await interviewer.open()
+    fake_ai.chat.script_for(
+        ProfilePatch,
+        {
+            "contact": {"full_name": "Ana Souza"},
+            "experiences": [{"company": "Acme", "title": "Dev", "new_bullets": ["Criou o app"]}],
+        },
+    )
+    await _respond(interviewer, interview, "Sou a Ana, dev na Acme, criei o app.")
+    # Something alive across turns (as in a voice session) keeps the objects in the session's
+    # identity map; without it they'd be garbage collected and reloaded, hiding the problem.
+    held = await profile_service.snapshot(db, user)
+    fake_ai.chat.script_for(
+        ProfilePatch,
+        {
+            "experiences": [{"ref": "E1", "new_bullets": ["Liderou o time"]}],
+            "preferences": {"work_modes": ["remote"], "seniority": "senior"},
+        },
+    )
+    await _respond(interviewer, interview, "Também liderei o time. Sou sênior e quero remoto.")
+
+    await _respond(interviewer, interview, "Era isso.")
+
+    plan_prompt = _calls(fake_ai, schema=TurnPlan)[-1].messages[-1].text
+    assert "- Criou o app" in plan_prompt and "- Liderou o time" in plan_prompt
+    assert "Modalidade: remote" in plan_prompt and "Senioridade: senior" in plan_prompt
+    assert held.profile is not None
