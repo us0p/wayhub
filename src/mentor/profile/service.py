@@ -208,7 +208,7 @@ def _fit(model: type[Base], name: str, value: object) -> object:
         and isinstance(column_type, ARRAY)
         and (length := getattr(column_type.item_type, "length", None))
     ):
-        return [v[:length] if isinstance(v, str) else v for v in value]
+        return [v[:length] if isinstance(v, str) and not isinstance(v, Enum) else v for v in value]
     return value
 
 

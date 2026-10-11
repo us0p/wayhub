@@ -178,11 +178,13 @@
 {% endmacro %}
 
 {# A passing notification that never takes the focus or blocks the page (D73). voice.js shows
-   the connection messages; after a voice session failed, the page shows `failed` once. #}
+   the connection messages; after a voice session failed (`?voz=connection|failure`), the page
+   shows why once (D75). #}
 {% macro toast(reason=None) %}
 <div id="toast" role="status" aria-live="polite" hidden
      data-reconnecting="{{ _('Erro de conexão, reconectando… (%(n)s/%(total)s)', n='{n}', total='{total}') }}"
      data-reconnected="{{ _('Conexão restabelecida.') }}"
-     {% if reason == 'failure' %}data-show="{{ _('Não consegui restabelecer a conexão de voz. Você pode continuar por texto.') }}"{% endif %}
+     {% if reason == 'connection' %}data-show="{{ _('Não consegui restabelecer a conexão de voz. Você pode continuar por texto.') }}"
+     {% elif reason == 'failure' %}data-show="{{ _('A Mari teve um problema para responder e a conversa por voz foi encerrada. Você pode continuar por texto.') }}"{% endif %}
      class="pointer-events-none fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-honey px-4 py-3 text-sm font-medium text-ink shadow-lg"></div>
 {% endmacro %}

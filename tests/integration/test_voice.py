@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from mentor.ai.adapters.fake import FakeAI
 from mentor.ai.ports import AIProviderError, Transcript
 from mentor.auth.models import User
+from mentor.interview.engine import InterviewEngine
 from mentor.interview.models import (
     Interview,
     InterviewStatus,
@@ -441,7 +442,7 @@ async def test_speech_recognition_failing_three_times_falls_back_to_text(
         received = await ws.receive_until(has_event("end"))
 
     assert [n["attempt"] for n in _notices(received, "reconnecting")] == [1, 2, 3]
-    assert events(received, "end") == [{"type": "end", "reason": "failure"}]
+    assert events(received, "end") == [{"type": "end", "reason": "connection"}]
     failure = next(r.getMessage() for r in caplog.records if "voice session failed" in r.message)
     assert "failed in _listen after" in failure and "listening, mic on" in failure
     assert "[STT ServiceUnavailable]" in failure
@@ -496,7 +497,7 @@ async def test_speech_synthesis_failing_three_times_falls_back_and_keeps_the_rep
         received = await ws.receive_until(has_event("end"))
 
     assert [n["attempt"] for n in _notices(received, "reconnecting")] == [1, 2, 3]
-    assert events(received, "end")[0]["reason"] == "failure"
+    assert events(received, "end")[0]["reason"] == "connection"
     # The text reply was generated and saved; the text UI shows it after the fallback.
     assert (await _turns(db, user))[-1].text == "Resposta de teste."
 
@@ -518,6 +519,49 @@ async def test_an_unanswered_turn_is_answered_when_voice_starts(
 
     assert "".join(e["text"] for e in events(received, "agent_text")) == "Legal! Há quanto tempo?"
     assert (await _turns(db, user))[-1].text == "Legal! Há quanto tempo?"
+    assert fake_ai.tts.texts == ["Legal!", "Há quanto tempo?"]  # spoken, not only shown
+
+
+async def test_a_reply_generated_by_the_text_page_is_replayed_and_spoken(
+    app: FastAPI,
+    client: AsyncClient,
+    db: AsyncSession,
+    fake_ai: FakeAI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Back in text after a failure, the page answers the pending turn; voice opened meanwhile
+    waits for that reply and must still speak it."""
+    user = await _user(client, db)
+    token = csrf_from((await client.get("/entrevista")).text)
+    await client.post(
+        "/entrevista/turnos", data={"texto": "Trabalho com dados."}, headers={"X-CSRF-Token": token}
+    )
+    pending = (await _turns(db, user))[-1]
+    pending.reply_started_at = func.now()  # the text page's stream is generating it
+    await db.commit()
+
+    async def other_stream_finishes(engine: InterviewEngine) -> None:
+        engine.db.add(
+            InterviewTurn(
+                interview_id=pending.interview_id,
+                user_id=user.id,
+                role=TurnRole.ASSISTANT,
+                text="Legal! Há quanto tempo?",
+                reply_to_id=pending.id,
+            )
+        )
+        await engine.db.commit()
+
+    monkeypatch.setattr(InterviewEngine, "_wait_for_other_stream", other_stream_finishes)
+
+    async with _ws(app, client) as ws:
+        await ws.receive()
+        received = await ws.receive_until(
+            lambda r: bool(events(r, "agent_done")) and any(isinstance(m, bytes) for m in r)
+        )
+
+    assert "".join(e["text"] for e in events(received, "agent_text")) == "Legal! Há quanto tempo?"
+    assert fake_ai.tts.texts == ["Legal!", "Há quanto tempo?"]
 
 
 async def test_page_offers_voice_mode_and_explains_why_it_ended(
@@ -543,13 +587,17 @@ async def test_page_has_a_toast_for_connection_notices_and_shows_the_failure_onc
     await _user(client, db)
 
     normal = await client.get("/entrevista")
-    failed = await client.get("/entrevista?voz=failure")
+    failed = await client.get("/entrevista?voz=connection")
+    broken = await client.get("/entrevista?voz=failure")
 
     assert 'id="toast"' in normal.text and "data-show=" not in normal.text
     assert "Erro de conexão, reconectando" in normal.text
     assert "Não consegui restabelecer a conexão de voz." in failed.text
     assert "data-show=" in failed.text
     assert "A conversa por voz foi interrompida" not in failed.text  # no inline note any more
+    # A failed reply is not blamed on the connection (D75).
+    assert "A Mari teve um problema para responder" in broken.text
+    assert "Não consegui restabelecer a conexão" not in broken.text
 
 
 async def test_page_marks_voice_as_exhausted_and_ignores_unknown_reasons(

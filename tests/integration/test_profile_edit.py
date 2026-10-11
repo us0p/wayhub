@@ -475,3 +475,5 @@ def test_patching_keeps_enums_as_enums() -> None:
     `profile.seniority.value`."""
     assert _fit(Profile, "seniority", Seniority.INTERN) is Seniority.INTERN
     assert _fit(Profile, "full_name", "x" * 500) == "x" * 200  # plain strings still clipped
+    modes = _fit(Profile, "work_modes", [WorkMode.REMOTE])
+    assert isinstance(modes, list) and modes[0] is WorkMode.REMOTE  # enum list items too

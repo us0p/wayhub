@@ -272,7 +272,7 @@ def test_voice_failure_shows_a_passing_toast_and_keeps_the_chat(
     itself and never blocks the composer."""
     _, page = viewport_page
     _sign_up(page, base_url)
-    page.goto(base_url + "/entrevista?voz=failure")
+    page.goto(base_url + "/entrevista?voz=connection")
     page.wait_for_load_state("load")
 
     toast = page.get_by_role("status").filter(has_text="Não consegui restabelecer a conexão")

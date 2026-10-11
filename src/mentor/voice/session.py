@@ -22,8 +22,9 @@ The session is transport-agnostic: it reads `Incoming` items (PCM16 audio at
 - Voice seconds are the audio streamed by the browser (D31), recorded every
   `usage_flush_seconds` and when the session ends. The limit is enforced in memory and
   refreshed from the database on each flush (so a second session also counts).
-- Any provider failure, a failed reply or a bug ends the session with `FAILURE`; the UI then
-  falls back to text in the same interview (D26), where a pending reply is retried.
+- STT/TTS connection failures are retried (D73); once the retries are spent the session ends
+  with `CONNECTION`. A failed reply or a bug ends it with `FAILURE`. Either way the UI falls
+  back to text in the same interview (D26), where a pending reply is retried.
 - Only transcripts are stored; audio is never persisted (D21).
 - The database session is shared with the engine and isn't safe for concurrent use, so every
   database access holds `_db`, including a whole reply (the graph may write between yields).
@@ -77,7 +78,8 @@ class EndReason(StrEnum):
     COMPLETED = "completed"  # the interview is complete
     VOICE_LIMIT = "voice_limit"  # no voice minutes left (D31)
     TURN_QUOTA = "turn_quota"  # daily interview-turn quota reached (D39)
-    FAILURE = "failure"  # provider failure, failed reply or bug: fall back to text (D26)
+    CONNECTION = "connection"  # STT/TTS still failing after the retries (D73)
+    FAILURE = "failure"  # failed reply or bug: fall back to text (D26)
     UNAVAILABLE = "unavailable"  # no interview in progress
 
 
@@ -266,7 +268,10 @@ class VoiceSession:
                 "muted" if self._muted else "mic on",
                 describe(exc),
             )
-            raise _Stop(EndReason.FAILURE) from exc
+            # Only STT/TTS errors get here as AIProviderError (the engine turns a failed
+            # reply into ReplyFailed): the user is told it was the connection (D73, D75).
+            reason = EndReason.CONNECTION if isinstance(exc, AIProviderError) else EndReason.FAILURE
+            raise _Stop(reason) from exc
 
     # -- incoming audio and controls -----------------------------------------------------
 

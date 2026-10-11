@@ -94,7 +94,7 @@ class VoiceSession {
       else this.play(message.data);
     };
     this.socket.onclose = () => {
-      if (!this.ended) this.finish("failure"); // dropped connection: fall back to text
+      if (!this.ended) this.finish("connection"); // dropped connection: fall back to text
     };
   }
 
