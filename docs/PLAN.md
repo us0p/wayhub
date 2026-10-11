@@ -212,6 +212,12 @@ Each user turn:
     `VPS_SSH_KEY`, app env on the VPS only). Recommend branch protection on `main` requiring CI.
 
 ## Possible improvements (not scheduled)
+- **Mari: a lighter, more natural voice and wording (to do, from M6 testing, D77).** It works
+  well but still sounds robotic, both in how it speaks (tone and prosody of the TTS voice) and in
+  what it says (phrasing of the messages). Goal: a light, warm, conversational tone, like a person
+  talking rather than a form being filled in. To explore: the interviewer prompts (`prompts.py`:
+  shorter, more varied acknowledgements, fewer stock phrases), other Chirp 3 HD voices and
+  speaking rate, and text tweaks for speech (punctuation, short sentences).
 - **Voice: neural noise suppression in the browser.** Run RNNoise (WebAssembly, ~100 KB) inside
   the capture AudioWorklet before downsampling; much better than the browser's built-in filter on
   sudden noise (DeepFilterNet is better still but heavy for phones). Vendored `.wasm` served from
