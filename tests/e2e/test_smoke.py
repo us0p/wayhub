@@ -4,6 +4,7 @@ pytest -m e2e --base-url http://localhost:8000
 
 import asyncio
 import os
+import re
 import uuid
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -279,3 +280,41 @@ def test_voice_failure_shows_a_passing_toast_and_keeps_the_chat(
     expect(toast).to_be_visible()
     page.get_by_label("Sua resposta").fill("Posso digitar com o aviso na tela.")  # not blocked
     expect(toast).to_be_hidden(timeout=10_000)  # passing, not permanent
+
+
+POSTING = (
+    "Desenvolvedora Python Sênior na Acme, trabalho remoto. Requisitos: 5 anos de experiência "
+    "com Python, Django e PostgreSQL; inglês avançado. Diferenciais: Kubernetes e AWS. "
+    "Benefícios: plano de saúde, vale-refeição e auxílio home office."
+)
+
+
+def test_import_a_job_by_text(viewport_page: tuple[str, Page], base_url: str) -> None:
+    """Needs the worker running next to the server (D78). With the fake AI nothing is
+    scripted, so reading the posting fails: the page still shows it was processed."""
+    kind, page = viewport_page
+    _sign_up(page, base_url, plan="free")
+
+    page.get_by_role("link", name="Nova vaga", exact=True).first.click()
+    expect(page.get_by_role("heading", name="Nova vaga")).to_be_visible()
+    expect(page.get_by_text("Importações restantes hoje: 10 de 10")).to_be_visible()
+    _check_layout(kind, page)
+
+    page.get_by_role("button", name="Importar vaga").click()
+    expect(page.get_by_role("alert")).to_contain_text("Cole o link ou o texto da vaga")
+
+    page.locator("#arquivos").set_input_files(
+        files=[{"name": "vaga.png", "mimeType": "image/png", "buffer": b"\x89PNG\r\n\x1a\n"}]
+    )
+    expect(page.get_by_text("vaga.png")).to_be_visible()
+    page.locator("#arquivos").set_input_files(files=[])
+    page.get_by_label("Link ou texto da vaga").fill(POSTING)
+    page.get_by_role("button", name="Importar vaga").click()
+
+    expect(page).to_have_url(re.compile(rf"{re.escape(base_url)}/vagas/[0-9a-f-]+$"))
+    expect(page.get_by_text("Não consegui ler essa vaga agora.")).to_be_visible(timeout=20_000)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+
+    page.get_by_role("link", name="Vagas e CVs").first.click()
+    expect(page.get_by_role("heading", name="Vagas e CVs")).to_be_visible()
+    expect(page.get_by_text("Falhou")).to_be_visible()

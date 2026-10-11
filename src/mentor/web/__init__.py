@@ -1,5 +1,7 @@
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi.templating import Jinja2Templates
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -16,6 +18,15 @@ _env = Environment(
     extensions=["jinja2.ext.i18n"],
 )
 _env.install_gettext_callables(gettext_, ngettext_, newstyle=True)  # type: ignore[attr-defined]
+
+LOCAL_TZ = ZoneInfo("America/Sao_Paulo")  # the users' (D39)
+
+
+def _local_date(value: datetime) -> str:
+    return value.astimezone(LOCAL_TZ).strftime("%d/%m/%Y")
+
+
+_env.filters["local_date"] = _local_date
 
 
 def _request_context(request: Request) -> dict[str, Any]:

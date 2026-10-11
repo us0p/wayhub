@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
-from mentor import health
+from mentor import health, worker
 from mentor.account import routes as account_routes
 from mentor.agents.checkpoint import close_checkpointer, get_checkpointer
 from mentor.ai.ports import AIConfigurationError
@@ -16,6 +16,7 @@ from mentor.auth import routes as auth_routes
 from mentor.auth.csrf import CSRFMiddleware
 from mentor.auth.deps import ConsentRequiredError, LoginRequiredError
 from mentor.interview import routes as interview_routes
+from mentor.jobs import routes as jobs_routes
 from mentor.legal import routes as legal_routes
 from mentor.profile import routes as profile_routes
 from mentor.quotas.service import QuotaExceededError
@@ -41,7 +42,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # The saver's setup() runs CREATE INDEX CONCURRENTLY, which waits for every open transaction.
     # Doing it on first use inside a request would deadlock against that request's own session.
     await get_checkpointer()
-    yield
+    async with worker.opened():  # to queue tasks (D78); the worker service runs them
+        yield
     await close_checkpointer()
 
 
@@ -74,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(account_routes.router)
     app.include_router(voice_routes.router)
     app.include_router(profile_routes.router)
+    app.include_router(jobs_routes.router)
     app.include_router(web_routes.router)
 
     @app.exception_handler(LoginRequiredError)

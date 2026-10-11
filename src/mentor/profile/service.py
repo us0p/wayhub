@@ -8,19 +8,17 @@ data.
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from enum import Enum
 from urllib.parse import urlsplit
 
 from langchain_core.embeddings import Embeddings
-from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from mentor.auth.models import User
 from mentor.db import Base
 from mentor.interview.schemas import ExperiencePatch, ProfilePatch
+from mentor.models import fit_to_column as _fit
 from mentor.profile import skills
 from mentor.profile.models import (
     Education,
@@ -213,23 +211,6 @@ def safe_url(url: str) -> str | None:
     if parts.scheme not in ("http", "https") or not parts.netloc or len(url) > 500:
         return None
     return url
-
-
-def _fit(model: type[Base], name: str, value: object) -> object:
-    """Clip strings (and string list items) to their column's length, so one over-long value
-    from the model doesn't fail the whole patch."""
-    column_type = sa_inspect(model).columns[name].type
-    if isinstance(value, Enum):  # a StrEnum is a str: slicing it would turn it into plain text
-        return value
-    if isinstance(value, str) and (length := getattr(column_type, "length", None)):
-        return value[:length]
-    if (
-        isinstance(value, list)
-        and isinstance(column_type, ARRAY)
-        and (length := getattr(column_type.item_type, "length", None))
-    ):
-        return [v[:length] if isinstance(v, str) and not isinstance(v, Enum) else v for v in value]
-    return value
 
 
 def _set(obj: Base, **values: object) -> None:

@@ -18,8 +18,11 @@ target_metadata = Base.metadata
 
 
 def include_name(name: str | None, type_: str, parent_names: object) -> bool:
-    """The LangGraph checkpointer owns its tables (D56); autogenerate must not drop them."""
-    return not (type_ == "table" and name in CHECKPOINT_TABLES)
+    """The LangGraph checkpointer (D56) and Procrastinate (D78) own their tables;
+    autogenerate must not drop them."""
+    if type_ != "table" or name is None:
+        return True
+    return name not in CHECKPOINT_TABLES and not name.startswith("procrastinate")
 
 
 def run_migrations_offline() -> None:

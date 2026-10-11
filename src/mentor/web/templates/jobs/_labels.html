@@ -1,0 +1,27 @@
+{# pt-BR labels for job import (import with `{% import "jobs/_labels.html" as J %}`). #}
+{% set form_errors = {
+  "empty": _("Cole o link ou o texto da vaga, ou anexe prints ou um PDF."),
+  "too_short": _("Esse texto é curto demais para ser uma vaga. Cole o anúncio completo ou envie o link."),
+  "too_long": _("Esse texto é longo demais. Cole só o anúncio da vaga."),
+  "file_type": _("Envie só imagens (PNG, JPG ou WebP) ou um único PDF."),
+  "one_pdf": _("Envie um PDF por vez."),
+  "too_many_images": _("Envie no máximo 5 prints."),
+  "file_size": _("Cada arquivo pode ter até 10 MB."),
+} %}
+{% set manual_reasons = {
+  "unsafe": _("Esse link não pode ser aberto por aqui."),
+  "unreachable": _("Não consegui abrir esse link."),
+  "blocked": _("O site pediu login ou não deixou ler a vaga automaticamente."),
+  "not_html": _("Esse link não leva a uma página que eu consiga ler."),
+  "too_big": _("A página desse link é grande demais para ler."),
+  "pdf_unreadable": _("Não consegui ler esse PDF (ele pode estar protegido por senha)."),
+} %}
+{% set status = {
+  "queued": _("Lendo a vaga…"), "processing": _("Lendo a vaga…"), "ready": _("Pronta"),
+  "needs_manual": _("Precisa do texto"), "not_a_job": _("Não é uma vaga"), "failed": _("Falhou"),
+} %}
+{% set kind = {
+  "skill": _("Habilidade"), "experience": _("Experiência"), "language": _("Idioma"),
+  "education": _("Formação"), "other": _("Outro"),
+} %}
+{% set source = {"text": _("Texto"), "url": _("Link"), "pdf": _("PDF"), "images": _("Prints")} %}

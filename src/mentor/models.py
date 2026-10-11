@@ -3,10 +3,13 @@
 
 import uuid
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum, StrEnum
+from typing import Any
 
-from sqlalchemy import DateTime, Enum, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, func
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -18,6 +21,23 @@ def created_at() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-def str_enum[E: StrEnum](enum: type[E], name: str) -> Enum:
+def str_enum[E: StrEnum](enum: type[E], name: str) -> SAEnum:
     """A Postgres enum type storing the members' values (not their names)."""
-    return Enum(enum, name=name, values_callable=lambda e: [m.value for m in e])
+    return SAEnum(enum, name=name, values_callable=lambda e: [m.value for m in e])
+
+
+def fit_to_column(model: type[Any], name: str, value: object) -> object:
+    """Clip strings (and string list items) to their column's length, so one over-long value
+    from the model doesn't fail the whole patch."""
+    column_type = sa_inspect(model).columns[name].type
+    if isinstance(value, Enum):  # a StrEnum is a str: slicing it would turn it into plain text
+        return value
+    if isinstance(value, str) and (length := getattr(column_type, "length", None)):
+        return value[:length]
+    if (
+        isinstance(value, list)
+        and isinstance(column_type, ARRAY)
+        and (length := getattr(column_type.item_type, "length", None))
+    ):
+        return [v[:length] if isinstance(v, str) and not isinstance(v, Enum) else v for v in value]
+    return value

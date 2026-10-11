@@ -39,3 +39,18 @@ FROM app AS dev
 USER root
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen
 USER mentor
+
+# --- Worker: the app plus headless Chromium, for job pages built by JavaScript (D78) ---
+FROM app AS worker
+USER root
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
+USER mentor
+CMD ["python", "-m", "mentor", "worker"]
+
+# --- Dev worker: the dev image plus Chromium ---
+FROM dev AS worker-dev
+USER root
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
+USER mentor
