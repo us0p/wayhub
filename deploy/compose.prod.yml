@@ -1,0 +1,85 @@
+# Production stack on the home notebook (D84, D88, D89). Installed as /opt/mentor/compose.yaml
+# next to the `.env` (from .env.prod.example) and secrets/gcloud.json; deploy.sh sets
+# MENTOR_TAG in `.env` to the commit being deployed. Changes to this file are copied to the
+# notebook by hand (see docs/RUNBOOK.md): the deploy key can only pick an image tag.
+name: mentor
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "3" }
+
+x-environment: &environment
+  APP_ENV: prod
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+  GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcloud.json
+
+x-mentor: &mentor
+  env_file: [.env]
+  environment: *environment
+  volumes:
+    - ./secrets/gcloud.json:/run/secrets/gcloud.json:ro
+  # Public resolvers: the router (the host's usual resolver) is on the LAN, which egress.sh
+  # blocks for this network.
+  dns: [1.1.1.1, 1.0.0.1]
+  depends_on:
+    db: { condition: service_healthy }
+  restart: unless-stopped
+  logging: *logging
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+    volumes: [pgdata:/var/lib/postgresql/data]  # no published port
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\""]
+      interval: 5s
+      retries: 20
+    mem_limit: 512m
+    restart: unless-stopped
+    logging: *logging
+
+  app:
+    <<: *mentor
+    image: ghcr.io/us0p/mentor:${MENTOR_TAG:?run deploy.sh}
+    environment:
+      <<: *environment
+      # Requests come from the host's cloudflared through the Docker gateway; the port is
+      # only on 127.0.0.1, so every proxy that can reach it is ours (D84).
+      FORWARDED_ALLOW_IPS: "*"
+    ports: ["127.0.0.1:8100:8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 768m
+
+  worker:
+    <<: *mentor
+    image: ghcr.io/us0p/mentor-worker:${MENTOR_TAG:?run deploy.sh}
+    environment:
+      <<: *environment
+      WORKER_CONCURRENCY: "1"  # never two Chromium at once (D88)
+    shm_size: 256m  # Chromium
+    mem_limit: 1g
+
+  # One-off: `docker compose run --rm migrate` (deploy.sh runs it before `up`).
+  migrate:
+    <<: *mentor
+    image: ghcr.io/us0p/mentor:${MENTOR_TAG:?run deploy.sh}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    profiles: [tools]
+
+networks:
+  default:
+    ipam:
+      config: [{ subnet: 172.29.42.0/24 }]  # egress.sh's MENTOR_NET
+
+volumes:
+  pgdata:

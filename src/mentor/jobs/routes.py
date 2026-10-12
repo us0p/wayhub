@@ -3,6 +3,7 @@ then see what it asks for and how the profile compares (the fit warning, M8, D80
 only viewed or deleted here; nothing is edited."""
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -116,6 +117,20 @@ async def job_page(request: Request, job_id: uuid.UUID, db: DB, user: CurrentUse
 async def job_state(request: Request, job_id: uuid.UUID, db: DB, user: CurrentUser) -> Response:
     """Polled while the worker reads the posting; stops polling once it's done."""
     job = await _job(db, user, job_id)
+    return templates.TemplateResponse(request, "jobs/_body.html", await _context(db, user, job))
+
+
+@router.post("/{job_id}/tentar-novamente", response_class=HTMLResponse)
+async def retry_import(
+    request: Request, job_id: uuid.UUID, db: DB, user: CurrentUser, queue: Queue
+) -> Response:
+    """Queue a lost import again (M10). Not metered: the submission was already counted, and
+    losing the task was our fault."""
+    job = await _job(db, user, job_id)
+    if job.lost:
+        job.requested_at = datetime.now(UTC)
+        await db.commit()
+        await queue.import_job(job.id)
     return templates.TemplateResponse(request, "jobs/_body.html", await _context(db, user, job))
 
 

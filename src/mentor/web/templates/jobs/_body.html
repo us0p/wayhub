@@ -2,7 +2,14 @@
    polls itself and swaps in the result once the status changes (D78). #}
 {% import "jobs/_labels.html" as J %}
 {% import "profile/_labels.html" as L %}
-{% if job.status in waiting %}
+{% if job.lost %}
+<div id="job-body" role="status" class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">
+  <p class="font-semibold">{{ _("A leitura desta vaga parou no meio do caminho.") }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Foi um problema do nosso lado. Tente de novo: não conta como uma nova importação.") }}</p>
+  <button hx-post="/vagas/{{ job.id }}/tentar-novamente" hx-target="#job-body" hx-swap="outerHTML"
+          class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Tentar de novo") }}</button>
+</div>
+{% elif job.status in waiting %}
 <div id="job-body" hx-get="/vagas/{{ job.id }}/estado" hx-trigger="every 2s" hx-swap="outerHTML"
      role="status" aria-live="polite" class="mt-6 rounded-[var(--radius-card)] bg-ink p-6 text-cream">
   <div class="flex items-center gap-3">

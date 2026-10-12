@@ -6,7 +6,7 @@
     <h1 class="text-2xl font-semibold md:text-3xl">{{ _("Nova vaga") }}</h1>
     <p class="mt-2 text-sm leading-relaxed text-taupe-strong">{{ _("Traga a vaga do jeito mais fácil para você: o link do anúncio, o texto copiado, prints da tela ou o PDF. Eu leio e separo o que ela pede.") }}</p>
     {% if quota.limit is not none %}
-    <p class="mt-2 text-xs text-taupe-strong">{{ _("Importações restantes hoje: %(n)s de %(total)s", n=quota.remaining, total=quota.limit) }}</p>
+    <p class="mt-2 text-xs text-taupe-strong">{{ _("Importações restantes na sua conta: %(n)s de %(total)s", n=quota.remaining, total=quota.limit) }}</p>
     {% endif %}
   </header>
   {% include "jobs/_form.html" %}

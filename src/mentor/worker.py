@@ -12,13 +12,13 @@ from collections.abc import AsyncIterator
 import procrastinate
 from psycopg_pool import AsyncConnectionPool
 
+from mentor import logs
 from mentor.agents.checkpoint import psycopg_dsn
 from mentor.settings import get_settings
 
 log = logging.getLogger(__name__)
 
 JOBS_QUEUE = "jobs"
-WORKER_CONCURRENCY = 4
 
 # No connection parameters here: `opened()` hands it a pool built from the settings, so
 # importing this module (the web app does) never needs the database.
@@ -49,7 +49,9 @@ async def run() -> None:
     from mentor.db import import_models
 
     import_models()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    async with opened(max_size=WORKER_CONCURRENCY + 2):
-        log.info("worker started")
-        await app.run_worker_async(queues=[JOBS_QUEUE], concurrency=WORKER_CONCURRENCY)
+    settings = get_settings()
+    logs.configure(settings.log_level)
+    concurrency = settings.worker_concurrency
+    async with opened(max_size=concurrency + 2):
+        log.info("worker started (concurrency %d)", concurrency)
+        await app.run_worker_async(queues=[JOBS_QUEUE], concurrency=concurrency)

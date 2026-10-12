@@ -297,7 +297,7 @@ def test_import_a_job_by_text(viewport_page: tuple[str, Page], base_url: str) ->
 
     page.get_by_role("link", name="Nova vaga", exact=True).first.click()
     expect(page.get_by_role("heading", name="Nova vaga")).to_be_visible()
-    expect(page.get_by_text("Importações restantes hoje: 10 de 10")).to_be_visible()
+    expect(page.get_by_text("Importações restantes na sua conta: 10 de 10")).to_be_visible()
     _check_layout(kind, page)
 
     page.get_by_role("button", name="Importar vaga").click()

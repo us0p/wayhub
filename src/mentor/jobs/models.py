@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from mentor.db import Base
-from mentor.models import created_at, str_enum, uuid_pk
+from mentor.models import created_at, is_lost, requested_at, str_enum, uuid_pk
 from mentor.profile.models import Seniority, WorkMode
 
 
@@ -84,6 +84,7 @@ class JobPosting(Base):
     summary: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = created_at()
+    requested_at: Mapped[datetime] = requested_at()
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     requirements: Mapped[list["JobRequirement"]] = relationship(
@@ -92,6 +93,13 @@ class JobPosting(Base):
         passive_deletes=True,
         order_by="JobRequirement.position",
     )
+
+    @property
+    def lost(self) -> bool:
+        """Still being read long after it was queued: the worker lost it (M10)."""
+        return self.status in (JobStatus.QUEUED, JobStatus.PROCESSING) and is_lost(
+            self.requested_at
+        )
 
 
 class JobRequirement(Base):

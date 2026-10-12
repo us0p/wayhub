@@ -4,6 +4,7 @@ itself for its edit form and back with htmx. Validation errors re-render the for
 because htmx only swaps 2xx responses."""
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -16,6 +17,7 @@ from mentor.cv.models import CV, CVStatus
 from mentor.cv.schemas import Change, CVContent, ExperienceEntry
 from mentor.i18n import gettext_ as _
 from mentor.jobs.models import JobPosting
+from mentor.jobs.queue import Queue
 from mentor.profile.edit import Reader
 from mentor.web import templates
 from mentor.web.redirects import redirect
@@ -118,6 +120,20 @@ async def cv_page(request: Request, cv_id: uuid.UUID, db: DB, user: CurrentUser)
 async def cv_state(request: Request, cv_id: uuid.UUID, db: DB, user: CurrentUser) -> Response:
     """Polled while the CV is written; stops polling once it's done."""
     cv, job = await _cv(db, user, cv_id)
+    return templates.TemplateResponse(request, "cv/_body.html", _context(cv, job))
+
+
+@router.post("/{cv_id}/tentar-novamente", response_class=HTMLResponse)
+async def retry(
+    request: Request, cv_id: uuid.UUID, db: DB, user: CurrentUser, queue: Queue
+) -> Response:
+    """Queue a lost version again (M10). Not metered: it was counted when requested, and
+    losing the task was our fault."""
+    cv, job = await _cv(db, user, cv_id)
+    if cv.lost:
+        cv.requested_at = datetime.now(UTC)
+        await db.commit()
+        await queue.generate_cv(cv.id)
     return templates.TemplateResponse(request, "cv/_body.html", _context(cv, job))
 
 

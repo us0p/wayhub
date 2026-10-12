@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_env: Literal["dev", "test", "prod"] = "prod"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Tasks the worker runs at once; production keeps it at 1 for memory (D88).
+    worker_concurrency: int = Field(default=4, ge=1)
     database_url: SecretStr
     secret_key: SecretStr = Field(min_length=32)
 

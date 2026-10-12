@@ -13,7 +13,7 @@
     <a href="/vagas/{{ job.id }}" class="block h-full rounded-[var(--radius-card)] bg-surface p-5 shadow-sm ring-1 ring-moss/40 transition active:scale-[.98]">
       <div class="flex items-start justify-between gap-3">
         <p class="min-w-0 font-semibold">{{ job.title or (_("Nova vaga") if job.status in waiting else _("Vaga sem título") if job.status == "ready" else _("Vaga não lida")) }}</p>
-        {% if job.status != "ready" %}<span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-taupe-strong">{{ J.status[job.status.value] }}</span>{% endif %}
+        {% if job.status != "ready" %}<span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-taupe-strong">{{ J.status["failed" if job.lost else job.status.value] }}</span>{% endif %}
       </div>
       {% if job.company %}<p class="mt-1 text-sm text-taupe-strong">{{ job.company }}</p>{% endif %}
       <p class="mt-2 text-xs text-taupe-strong">{{ J.source[job.source.value] }} · {{ job.created_at | local_date }}</p>

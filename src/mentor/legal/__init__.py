@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mentor.auth.models import Consent
 
-TERMS_VERSION = "2026-10-08"
+TERMS_VERSION = "2026-10-11"
 PRIVACY_VERSION = "2026-10-08"
 
 

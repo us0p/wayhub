@@ -33,8 +33,7 @@ async def test_a_queued_import_runs_in_the_worker_once(monkeypatch: pytest.Monke
 
     with worker.app.replace_connector(InMemoryConnector()) as app:
         await ProcrastinateQueue().import_job(job_id)
-        with pytest.raises(Exception, match="queueing lock"):  # the same posting twice
-            await ProcrastinateQueue().import_job(job_id)
+        await ProcrastinateQueue().import_job(job_id)  # again (a retry): still one in the queue
         [job] = app.connector.jobs.values()  # type: ignore[attr-defined]
         assert (job["queue_name"], job["task_name"]) == (worker.JOBS_QUEUE, "import_job")
 

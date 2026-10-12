@@ -1,7 +1,14 @@
 {# A CV version: being written (polls itself), failed, or ready with its downloads, the CV
    and what the verification changed (D81). #}
 {% import "cv/_labels.html" as C %}
-{% if cv.status == "pending" %}
+{% if cv.lost %}
+<div id="cv-body" role="status" class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">
+  <p class="font-semibold">{{ _("Este currículo parou no meio do caminho.") }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Foi um problema do nosso lado. Tente de novo: não conta como um novo currículo.") }}</p>
+  <button hx-post="/curriculos/{{ cv.id }}/tentar-novamente" hx-target="#cv-body" hx-swap="outerHTML"
+          class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Tentar de novo") }}</button>
+</div>
+{% elif cv.status == "pending" %}
 <div id="cv-body" hx-get="/curriculos/{{ cv.id }}/estado" hx-trigger="every 2s" hx-swap="outerHTML"
      role="status" aria-live="polite" class="mt-6 rounded-[var(--radius-card)] bg-ink p-6 text-cream">
   <div class="flex items-center gap-3">

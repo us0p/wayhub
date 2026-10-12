@@ -380,7 +380,7 @@ async def test_usage_is_recorded_while_streaming(
     assert events(received, "remaining") == [{"type": "remaining", "seconds": 59}]
 
 
-async def test_daily_turn_quota_ends_voice_mode(
+async def test_the_turn_quota_ends_voice_mode(
     app: FastAPI, client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
 ) -> None:
     user = await _user(client, db, interview_turn=0)
