@@ -365,8 +365,9 @@ sudo -u deploy nano /opt/mentor/.env
    - Exija os status checks `secrets-scan`, `lint`, `test`, `e2e` e `docker`.
    - Bloqueie force push.
 4. As imagens no GHCR serão **públicas**: não contêm segredos e o código já é público. Assim o
-   notebook baixa sem login. No primeiro deploy eu aviso para mudar a visibilidade do pacote,
-   caso ele nasça privado.
+   notebook baixa sem login. Depois do primeiro deploy, em *github.com/us0p → Packages*, abra
+   `mentor` e `mentor-worker` e, se estiverem privados, em *Package settings → Change
+   visibility* deixe **Public**; depois rode de novo o workflow *Deploy* que falhou.
 
 > **Me avise:** que o environment e a proteção da `main` estão configurados.
 

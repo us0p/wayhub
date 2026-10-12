@@ -1,0 +1,95 @@
+# Deploy to production (D84, D89): after CI passes on a push to main, build the app and worker
+# images for that commit, push them to GHCR (public), then run /opt/mentor/deploy.sh on the
+# notebook over SSH through Cloudflare Access.
+# Security notes (D37, D84):
+# - Third-party actions are pinned to full commit SHAs; cloudflared is checksum-verified.
+# - Only pushes to main deploy (never a pull request's code), in the `production` environment,
+#   whose secrets are limited to main.
+# - The deploy key is locked on the notebook to `deploy.sh`, which only accepts a commit SHA;
+#   the host key is pinned (DEPLOY_KNOWN_HOSTS), never trusted on first use.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  SHA: ${{ github.event.workflow_run.head_sha }}
+  CLOUDFLARED_VERSION: "2026.9.3"
+  CLOUDFLARED_SHA256: "77e26d8d900e0b8469f416239d14b5f296525fdf79fee6f511ef55609e3fbac2"
+
+jobs:
+  images:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: { ref: "${{ env.SHA }}", persist-credentials: false }
+      - uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3.8.0
+      - name: Log in to GHCR
+        env: { TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
+        run: echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          context: .
+          target: app
+          push: true
+          tags: ghcr.io/us0p/mentor:${{ env.SHA }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          context: .
+          target: worker
+          push: true
+          tags: ghcr.io/us0p/mentor-worker:${{ env.SHA }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
+      - run: docker logout ghcr.io
+
+  deploy:
+    needs: images
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - name: Install cloudflared (checksum-verified)
+        run: |
+          curl -sSLfo "$RUNNER_TEMP/cloudflared" "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64"
+          echo "${CLOUDFLARED_SHA256}  $RUNNER_TEMP/cloudflared" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/cloudflared"
+      - name: SSH key and pinned host key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          (umask 077 && printf '%s\n' "$KEY" > ~/.ssh/deploy && printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts)
+      - name: Run deploy.sh on the notebook
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          TUNNEL_SERVICE_TOKEN_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          TUNNEL_SERVICE_TOKEN_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o ServerAliveInterval=30 \
+            -o ProxyCommand="$RUNNER_TEMP/cloudflared access ssh --hostname %h" \
+            "$USER_NAME@$HOST" "$SHA"
+      - if: always()
+        run: rm -f ~/.ssh/deploy

@@ -35,7 +35,7 @@ uv run python -m mentor worker    # the Procrastinate task worker (compose runs 
 
 CSS is built with the **Tailwind v4 standalone CLI** (no Node): `tailwindcss -i src/mentor/web/static/css/input.css -o src/mentor/web/static/css/app.css`. `app.css` is git-ignored and built by the Dockerfile `css` stage, the compose `tailwind` service, and CI.
 
-CI (`.github/workflows/ci.yml`) runs these jobs: secrets-scan (gitleaks over full history), lint (ruff + mypy), test (pgvector service; migrations up/down/up, then pytest), e2e (Playwright), and docker build. A deploy workflow comes in Milestone 10d.
+CI (`.github/workflows/ci.yml`) runs these jobs: secrets-scan (gitleaks over full history), lint (ruff + mypy), test (pgvector service; migrations up/down/up, then pytest), e2e (Playwright), and docker build. `.github/workflows/deploy.yml` (D90) runs after CI passes on a push to `main`: it pushes the `mentor`/`mentor-worker` images tagged with the commit SHA to GHCR and runs `deploy.sh <sha>` on the notebook over SSH through Cloudflare Access.
 
 Production (D84, D88, D89) runs on the owner's notebook from `deploy/`: `compose.prod.yml` (installed by hand as `/opt/mentor/compose.yaml`), `deploy.sh <sha>` (pull → migrate → up → `/health`, rollback without migrating, so a migration must stay compatible with the previous release), `.env.prod.example`, and `egress.sh` (blocks the containers from the LAN). The owner's setup checklist is `docs/SETUP_PRODUCAO.md` (pt-BR).
 

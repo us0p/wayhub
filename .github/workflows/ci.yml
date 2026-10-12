@@ -1,4 +1,4 @@
-# Quality gates (D32). Deploy workflow is added in Milestone 10.
+# Quality gates (D32). A push to main that passes here is deployed by deploy.yml (D84, D90).
 # Security notes (D37):
 # - Third-party actions are pinned to full commit SHAs (tags are mutable).
 # - GITHUB_TOKEN is read-only and checkout does not persist it.

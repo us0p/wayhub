@@ -18,7 +18,7 @@
 | 7. Job import | Done — PR #7 (`feat/m7-job-ingestion`, D78, D79): text, PDF, screenshots and links on the Procrastinate worker; read-only job page |
 | 8. Fit warning | Done — PR #8 (`feat/m8-fit-warning`, D80): per-requirement verdicts on the job page, analyzed right after import |
 | 9. CV generation | Done — PR #9 (`feat/m9-cv-generation`, D81–D83): generation + Model A verification (changes shown), CV page, PDF/DOCX, versions, editor (edit text, hide items) |
-| 10. Production | In progress — branch `feat/m10-production` (D84–D86): 10a and 10b done; 10c written (D89); 10d–10f next |
+| 10. Production | In progress — branch `feat/m10-production` (D84–D86): 10a and 10b done; 10c and 10d written (D89, D90); 10e–10f next |
 
 ## Context
 Mentor Phase 1 (see `SCOPE.md`) is a candidate-focused career tool. This MVP delivers:
@@ -237,9 +237,10 @@ Each user turn:
         updates, no disk encryption (D88), SSH by key only, a `deploy` user in the `docker` group.
       - Worker egress: a `DOCKER-USER` iptables rule dropping traffic from the compose network to
         private ranges (the home LAN, router), backing the SSRF guard (D79).
-    - **10d. Deploy workflow** (`.github/workflows/deploy.yml`)
+    - **10d. Deploy workflow** (`.github/workflows/deploy.yml`) — written (D90); runs from the first
+      push to `main` after the merge.
       - On push to `main` after CI passes (`workflow_run`), in a `production` environment.
-      - Build and push `app` and `worker` to GHCR (tag = commit SHA, plus `main`).
+      - Build and push `app` and `worker` to GHCR (tag = commit SHA).
       - SSH through Cloudflare Access: install a checksum-verified `cloudflared`, service token
         (`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`), pinned `known_hosts`, a deploy key
         locked to `command="/opt/mentor/deploy.sh",restrict` (the tag comes in
