@@ -24,7 +24,7 @@ WORKER_CONCURRENCY = 4
 # importing this module (the web app does) never needs the database.
 app = procrastinate.App(
     connector=procrastinate.PsycopgConnector(),
-    import_paths=["mentor.jobs.tasks", "mentor.fit.tasks"],
+    import_paths=["mentor.jobs.tasks", "mentor.fit.tasks", "mentor.cv.tasks"],
 )
 
 

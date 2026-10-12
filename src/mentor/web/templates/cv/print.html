@@ -1,0 +1,58 @@
+{# The CV as printed by WeasyPrint (M9, D10): never served to a browser, so its inline styles
+   don't meet the CSP. One ATS-friendly column, real text, standard headings. #}
+<!doctype html>
+<html lang="{{ cv.language }}">
+<head>
+<meta charset="utf-8">
+<title>{{ cv.contact.name or "CV" }}</title>
+<style>
+  @page { size: A4; margin: 16mm 17mm; }
+  body { font-family: "Liberation Sans", Arial, "DejaVu Sans", sans-serif; font-size: 10.5pt; line-height: 1.4; color: #2f2f2f; }
+  h1 { font-size: 20pt; margin: 0; }
+  .headline { font-size: 11.5pt; margin: 2pt 0 0; }
+  .contact { font-size: 9.5pt; margin: 4pt 0 0; color: #4a4a4a; }
+  h2 { font-size: 10.5pt; text-transform: uppercase; letter-spacing: 0.06em; margin: 14pt 0 5pt; padding-bottom: 2pt; border-bottom: 0.75pt solid #92b4a7; }
+  .entry { margin: 0 0 8pt; page-break-inside: avoid; }
+  .entry-title { font-weight: bold; margin: 0; }
+  .entry-meta { font-size: 9.5pt; color: #4a4a4a; margin: 0; }
+  ul { margin: 3pt 0 0; padding-left: 13pt; }
+  li { margin: 0 0 2pt; }
+  p { margin: 0; }
+</style>
+</head>
+<body>
+  <h1>{{ cv.contact.name or "" }}</h1>
+  {% if cv.headline %}<p class="headline">{{ cv.headline.text }}</p>{% endif %}
+  {% if contact_line %}<p class="contact">{{ contact_line | join(" | ") }}</p>{% endif %}
+  {% if cv.summary %}
+  <h2>{{ words.summary }}</h2>
+  <p>{{ cv.summary.text }}</p>
+  {% endif %}
+  {% if cv.experiences %}
+  <h2>{{ words.experience }}</h2>
+  {% for entry in cv.experiences %}
+  <div class="entry">
+    <p class="entry-title">{{ entry.title.text }}{% if entry.company %} — {{ entry.company }}{% endif %}</p>
+    {% if periods[loop.index0] %}<p class="entry-meta">{{ periods[loop.index0] }}</p>{% endif %}
+    {% if entry.bullets %}
+    <ul>{% for bullet in entry.bullets %}<li>{{ bullet.text }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% if cv.skills %}
+  <h2>{{ words.skills }}</h2>
+  <p>{{ cv.skills | map(attribute="text") | join(", ") }}</p>
+  {% endif %}
+  {% if cv.education %}
+  <h2>{{ words.education }}</h2>
+  {% for item in cv.education %}
+  <div class="entry"><p class="entry-title">{{ item.text }}</p>{% if item.detail %}<p class="entry-meta">{{ item.detail }}</p>{% endif %}</div>
+  {% endfor %}
+  {% endif %}
+  {% if cv.languages %}
+  <h2>{{ words.languages }}</h2>
+  {% for item in cv.languages %}<p>{{ item.text }}</p>{% endfor %}
+  {% endif %}
+</body>
+</html>

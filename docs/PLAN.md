@@ -16,8 +16,9 @@
 | 5. Review/edit profile | Done — branch `feat/m5-profile-review` (D60, D61) |
 | 6. Voice interview | Done — branch `feat/m6-voice-interview` (D62–D76) |
 | 7. Job import | Done — PR #7 (`feat/m7-job-ingestion`, D78, D79): text, PDF, screenshots and links on the Procrastinate worker; read-only job page |
-| 8. Fit warning | In progress — branch `feat/m8-fit-warning` (D80): per-requirement verdicts on the job page, analyzed right after import |
-| 9–10 | Not started |
+| 8. Fit warning | Done — PR #8 (`feat/m8-fit-warning`, D80): per-requirement verdicts on the job page, analyzed right after import |
+| 9. CV generation | In progress, branch `feat/m9-cv-generation` (D81–D83): 9a generation + Model A verification (changes shown), CV page, PDF/DOCX, versions; 9b the editor (edit text, hide items). Awaiting PR |
+| 10 | Not started |
 
 ## Context
 Mentor Phase 1 (see `SCOPE.md`) is a candidate-focused career tool. This MVP delivers:

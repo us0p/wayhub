@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% import "cv/_labels.html" as C %}
+{% block title %}{{ _("Currículo") }} · {{ job.title or _("Vaga") }} · Mentor{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <a href="/vagas/{{ job.id }}#curriculos" class="text-sm font-medium text-sage-strong underline underline-offset-4">{{ job.title or _("Voltar para a vaga") }}</a>
+  <h1 class="mt-4 text-2xl font-semibold">{{ _("Currículo · versão %(n)s", n=cv.version) }}</h1>
+  <p class="mt-1 text-sm text-taupe-strong">{{ C.language.get(cv.language, cv.language) }} · {{ cv.created_at | local_date }}</p>
+  {% include "cv/_body.html" %}
+</div>
+{% endblock %}

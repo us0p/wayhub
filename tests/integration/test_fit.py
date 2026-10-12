@@ -431,6 +431,25 @@ async def test_the_page_polls_until_the_analysis_is_done(
     assert polling in waiting.text and "Comparando a vaga com o seu perfil" in waiting.text
     assert 'id="job-fit"' in done.text and "every 2s" not in done.text
     assert "Você atende 1 de 3 exigências" in done.text
+    # The requirements and the CV block (its button depends on the fit) swap in with the result,
+    # and only then: swapping the CV block while polling would reset its language choice.
+    oob = 'hx-swap-oob="true"'
+    assert oob not in waiting.text
+    assert done.text.count(oob) == 2
+    assert 'id="job-requirements"' in done.text and 'id="curriculos"' in done.text
+
+
+async def test_the_cv_block_sits_between_the_fit_summary_and_the_requirements(
+    client: AsyncClient, db: AsyncSession, fake_ai: FakeAI
+) -> None:
+    user = await _user(client, db)
+    await _profile(db, fake_ai, user)
+    job = await _job(db, user, REQUIREMENTS)
+
+    page = (await client.get(f"/vagas/{job.id}")).text
+
+    order = ['id="job-fit"', 'id="curriculos"', 'id="job-requirements"']
+    assert [page.index(x) for x in order] == sorted(page.index(x) for x in order)
 
 
 async def test_a_lost_analysis_offers_a_retry(

@@ -19,6 +19,7 @@ class Base(DeclarativeBase):
 def import_models() -> None:
     """Import every model module so `Base.metadata` is complete (Alembic, tests)."""
     import mentor.auth.models
+    import mentor.cv.models
     import mentor.fit.models
     import mentor.interview.models
     import mentor.jobs.models

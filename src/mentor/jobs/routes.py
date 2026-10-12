@@ -12,7 +12,9 @@ from starlette.datastructures import UploadFile  # what request.form() returns
 from starlette.responses import Response
 
 from mentor.auth.deps import DB, CurrentUser
+from mentor.cv import service as cvs
 from mentor.fit import service as fit
+from mentor.interview import store as interviews
 from mentor.jobs import service
 from mentor.jobs.models import JobPosting, JobStatus
 from mentor.jobs.queue import Queue
@@ -88,8 +90,17 @@ def _form(request: Request, text: str, error: str) -> Response:
 
 
 async def _context(db: DB, user: CurrentUser, job: JobPosting) -> dict[str, object]:
-    ready = job.status is JobStatus.READY
-    return {"job": job, "waiting": WAITING, "fit": await fit.view(db, user, job) if ready else None}
+    context: dict[str, object] = {"job": job, "waiting": WAITING, "fit": None}
+    if job.status is JobStatus.READY:
+        context |= {
+            "fit": await fit.view(db, user, job),
+            "cvs": await cvs.job_cvs(db, job),
+            "cv_unlocked": await interviews.has_completed_interview(db, user),
+            "cv_quota": await quotas.status(db, user, QuotaKind.CV_GENERATION),
+            "cv_languages": cvs.LANGUAGES,
+            "cv_language": cvs.default_language(job),
+        }
+    return context
 
 
 @router.get("/{job_id}", response_class=HTMLResponse)
@@ -112,7 +123,8 @@ async def job_state(request: Request, job_id: uuid.UUID, db: DB, user: CurrentUs
 async def fit_state(request: Request, job_id: uuid.UUID, db: DB, user: CurrentUser) -> Response:
     """Polled while the fit is analyzed; stops polling once it's done."""
     job = await _job(db, user, job_id)
-    return templates.TemplateResponse(request, "jobs/_fit.html", await _context(db, user, job))
+    context = await _context(db, user, job) | {"fit_fragment": True}
+    return templates.TemplateResponse(request, "jobs/_fit.html", context)
 
 
 @router.post("/{job_id}/compatibilidade", response_class=HTMLResponse)
@@ -126,7 +138,8 @@ async def redo_fit(
         await fit.request(db, job.id, user.id)
         await db.commit()
         await queue.analyze_fit(job.id)
-    return templates.TemplateResponse(request, "jobs/_fit.html", await _context(db, user, job))
+    context = await _context(db, user, job) | {"fit_fragment": True}
+    return templates.TemplateResponse(request, "jobs/_fit.html", context)
 
 
 @router.delete("/{job_id}")
@@ -135,3 +148,26 @@ async def delete_job(request: Request, job_id: uuid.UUID, db: DB, user: CurrentU
     await db.delete(job)
     await db.commit()
     return redirect(request, "/vagas")
+
+
+@router.post("/{job_id}/curriculos")
+async def generate_cv(
+    request: Request, job_id: uuid.UUID, db: DB, user: CurrentUser, queue: Queue
+) -> Response:
+    """A new CV version for the posting (D81). Only once the interview was completed (D16);
+    counted on submission, like an import."""
+    job = await _job(db, user, job_id)
+    if job.status is not JobStatus.READY:
+        raise HTTPException(status_code=409)
+    if not await interviews.has_completed_interview(db, user):
+        raise HTTPException(status_code=403)
+    form = await request.form()
+    language = str(form.get("idioma") or "")
+    if language not in cvs.LANGUAGES:
+        language = cvs.default_language(job)
+    await quotas.check(db, user, QuotaKind.CV_GENERATION)
+    cv = await cvs.request(db, user, job, language)
+    await quotas.record(db, user, QuotaKind.CV_GENERATION)
+    await db.commit()
+    await queue.generate_cv(cv.id)
+    return redirect(request, f"/curriculos/{cv.id}")

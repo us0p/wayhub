@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Editar currículo") }} · {{ job.title or _("Vaga") }} · Mentor{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <a href="/curriculos/{{ cv.id }}" class="text-sm font-medium text-sage-strong underline underline-offset-4">{{ _("Voltar para o currículo") }}</a>
+  <h1 class="mt-4 text-2xl font-semibold">{{ _("Editar currículo · versão %(n)s", n=cv.version) }}</h1>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Ajuste o texto ou oculte o que não quer mostrar nesta versão. O que estiver oculto não vai para o PDF nem para o DOCX.") }}</p>
+  <p role="note" class="mt-4 rounded-2xl bg-cream px-4 py-3 text-sm">{{ _("O que você escrever aqui vai para o currículo como está: eu não confiro as suas edições. Nome, empresas, datas, contato e habilidades vêm do seu perfil e se ajustam por lá.") }}</p>
+  <div class="mt-6 space-y-4">
+    {% for key in blocks %}{% include "cv/_edit_block.html" %}{% endfor %}
+  </div>
+  <a href="/curriculos/{{ cv.id }}" class="mt-8 inline-flex w-full items-center justify-center rounded-full bg-sage px-6 py-3 text-sm font-semibold text-ink shadow transition active:scale-95 sm:w-auto">{{ _("Pronto") }}</a>
+</div>
+{% endblock %}
