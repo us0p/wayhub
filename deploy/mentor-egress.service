@@ -1,0 +1,14 @@
+# Installed as /etc/systemd/system/mentor-egress.service (see docs/SETUP_PRODUCAO.md).
+[Unit]
+Description=Block Mentor containers from the LAN
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/mentor-egress
+
+[Install]
+WantedBy=docker.service

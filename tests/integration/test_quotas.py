@@ -1,7 +1,9 @@
 import argparse
 from datetime import timedelta
+from typing import Any
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mentor.auth.models import Plan, User
@@ -19,30 +21,58 @@ async def user(db: AsyncSession) -> User:
     return user
 
 
-async def test_free_plan_blocks_after_daily_limit(db: AsyncSession, user: User) -> None:
+async def test_free_plan_blocks_after_its_limit(db: AsyncSession, user: User) -> None:
     await quotas.record(db, user, QuotaKind.JOB_IMPORT, 10)
 
     with pytest.raises(quotas.QuotaExceededError) as exc:
         await quotas.check(db, user, QuotaKind.JOB_IMPORT)
 
-    assert exc.value.status.limit == 10
-    assert exc.value.status.resets_at is not None
+    assert exc.value.status.limit == 10 and exc.value.status.remaining == 0
 
 
-async def test_daily_usage_from_yesterday_does_not_count(db: AsyncSession, user: User) -> None:
-    db.add(
-        UsageEvent(
-            user_id=user.id,
-            kind=QuotaKind.CV_GENERATION,
-            amount=10,
-            created_at=now() - timedelta(days=1, hours=1),
-        )
-    )
+@pytest.mark.parametrize("kind", list(QuotaKind))
+async def test_every_limit_is_a_lifetime_total(
+    db: AsyncSession, user: User, kind: QuotaKind
+) -> None:
+    """D85: usage never stops counting, however long ago it was."""
+    db.add(UsageEvent(user_id=user.id, kind=kind, amount=3, created_at=now() - timedelta(days=400)))
     await db.flush()
 
-    status = await quotas.check(db, user, QuotaKind.CV_GENERATION)
+    status = await quotas.check(db, user, kind)
 
-    assert status.used == 0
+    assert status.used == 3
+
+
+async def test_a_limited_check_holds_the_users_lock_until_the_transaction_ends(
+    db: AsyncSession, user: User, engine: Any
+) -> None:
+    """Two requests of the same user can't both pass the check before either records."""
+    key = quotas.lock_key(user)
+    try_lock = select(func.pg_try_advisory_xact_lock(key))
+
+    await quotas.check(db, user, QuotaKind.CV_GENERATION)
+
+    async with engine.connect() as other:
+        assert await other.scalar(try_lock) is False
+        await other.rollback()
+    # Other users aren't held up.
+    other_user = User(google_sub="dev:r@example.com", email="r@example.com", name="R")
+    db.add(other_user)
+    await db.flush()
+    async with engine.connect() as other:
+        assert await other.scalar(
+            select(func.pg_try_advisory_xact_lock(quotas.lock_key(other_user)))
+        )
+        await other.rollback()
+
+
+def test_free_plan_limits() -> None:
+    assert quotas.PLAN_LIMITS[Plan.FREE] == {
+        QuotaKind.INTERVIEW_TURN: 150,
+        QuotaKind.JOB_IMPORT: 10,
+        QuotaKind.CV_GENERATION: 10,
+        QuotaKind.VOICE_SECONDS: 30 * 60,
+    }
 
 
 async def test_voice_is_a_lifetime_allowance(db: AsyncSession, user: User) -> None:

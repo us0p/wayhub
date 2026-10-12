@@ -2,6 +2,7 @@
 queue is replaced by a recorder) and the job pages."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -204,7 +205,7 @@ async def test_oversized_files_are_refused(
     assert await _jobs(db, user) == []
 
 
-async def test_the_daily_import_quota_is_enforced(
+async def test_the_import_quota_is_enforced(
     client: AsyncClient, db: AsyncSession, queue: RecordingQueue
 ) -> None:
     user = await _user(client, db)
@@ -494,7 +495,7 @@ async def test_the_list_shows_the_users_jobs_newest_first(
     page = (await client.get("/vagas")).text
 
     assert "Nenhuma vaga ainda" in empty.text
-    assert "Importações restantes hoje: 8 de 10" in (await client.get("/vagas/nova")).text
+    assert "Importações restantes na sua conta: 8 de 10" in (await client.get("/vagas/nova")).text
     assert page.index("Lendo a vaga") < page.index("Desenvolvedora Python Sênior")
     assert 'aria-current="page"' in page
 
@@ -534,3 +535,37 @@ async def test_deleting_a_job_removes_it(
 
     assert response.headers["HX-Redirect"] == "/vagas"
     assert await _jobs(db, user) == []
+
+
+async def test_a_lost_import_offers_a_free_retry(
+    client: AsyncClient, db: AsyncSession, queue: RecordingQueue, fake_ai: FakeAI
+) -> None:
+    """M10: a worker that died mid-task leaves the posting queued; after a while the page stops
+    waiting and offers to try again, without counting another import."""
+    user = await _user(client, db)
+    await _submit(client, "Vaga de Python " * 20)
+    [job] = await _jobs(db, user)
+    token = csrf_from((await client.get("/vagas/nova")).text)
+    headers = {"X-CSRF-Token": token, "HX-Request": "true"}
+
+    early = await client.post(f"/vagas/{job.id}/tentar-novamente", headers=headers)
+    assert queue.queued == [job.id] and "every 2s" in early.text  # not lost yet: nothing to do
+
+    job.status = JobStatus.PROCESSING
+    job.requested_at = datetime.now(UTC) - timedelta(minutes=6)
+    await db.commit()
+    page = (await client.get(f"/vagas/{job.id}")).text
+    listing = (await client.get("/vagas")).text
+
+    assert "A leitura desta vaga parou no meio do caminho." in page and "every 2s" not in page
+    assert "Falhou" in listing
+
+    retry = await client.post(f"/vagas/{job.id}/tentar-novamente", headers=headers)
+
+    assert queue.queued == [job.id, job.id]
+    assert "every 2s" in retry.text and "Lendo a vaga" in retry.text
+    assert await _imports(db, user) == 1
+    fake_ai.chat.script_for(ParsedJob, PARSED)
+    await service.process(db, fake_ai, job.id)  # the rerun picks up the half-done posting
+    await db.refresh(job)
+    assert job.status is JobStatus.READY and not job.lost

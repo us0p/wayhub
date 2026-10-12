@@ -3,6 +3,7 @@
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 CONTENT_SECURITY_POLICY = "; ".join(
     [
@@ -30,12 +31,29 @@ SECURITY_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
 }
 
-# HSTS is set by the TLS-terminating proxy (Caddy) in production, not here.
+# Production only (D84): Cloudflare terminates TLS, and its zone-wide HSTS would also bind the
+# owner's other subdomains, so the app sends it for its own host (no includeSubDomains).
+HSTS = "max-age=31536000"
+
+# Pages and event streams ask proxies not to change them: Cloudflare then injects none of its
+# scripts (Web Analytics beacon, email obfuscation, Rocket Loader), which the CSP would block
+# (D89). Static files keep their compression.
+NO_TRANSFORM_TYPES = ("text/html", "text/event-stream")
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: ASGIApp, *, hsts: bool = False) -> None:
+        super().__init__(app)
+        self.headers = SECURITY_HEADERS | ({"Strict-Transport-Security": HSTS} if hsts else {})
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
-        for name, value in SECURITY_HEADERS.items():
+        for name, value in self.headers.items():
             response.headers.setdefault(name, value)
+        if response.headers.get("content-type", "").startswith(NO_TRANSFORM_TYPES):
+            cache = response.headers.get("cache-control")
+            if cache is None:
+                response.headers["Cache-Control"] = "no-transform"
+            elif "no-transform" not in cache:
+                response.headers["Cache-Control"] = f"{cache}, no-transform"
         return response

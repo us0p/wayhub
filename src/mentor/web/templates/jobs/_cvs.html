@@ -22,7 +22,7 @@
     </button>
   </form>
   {% if cv_quota.limit is not none %}
-  <p class="mt-3 text-xs text-moss">{{ _("Currículos restantes hoje: %(n)s de %(total)s", n=cv_quota.remaining, total=cv_quota.limit) }}</p>
+  <p class="mt-3 text-xs text-moss">{{ _("Currículos restantes na sua conta: %(n)s de %(total)s", n=cv_quota.remaining, total=cv_quota.limit) }}</p>
   {% endif %}
   {% endif %}
   {% if cvs %}
@@ -32,7 +32,7 @@
     <li>
       <a href="/curriculos/{{ cv.id }}" class="flex items-center justify-between gap-3 rounded-2xl bg-cream/10 px-4 py-3 text-sm transition hover:bg-cream/20">
         <span>{{ _("Versão %(n)s", n=cv.version) }} · {{ C.language.get(cv.language, cv.language) }} · {{ cv.created_at | local_date }}</span>
-        {% if cv.status != "ready" %}<span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-ink">{{ C.status[cv.status.value] }}</span>{% endif %}
+        {% if cv.status != "ready" %}<span class="shrink-0 rounded-full bg-cream px-2.5 py-1 text-xs text-ink">{{ C.status["failed" if cv.lost else cv.status.value] }}</span>{% endif %}
       </a>
     </li>
     {% endfor %}

@@ -2,7 +2,7 @@
 `mentor.db.import_models()` imports them all so Alembic and tests see the full metadata."""
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import Enum, StrEnum
 from typing import Any
 
@@ -19,6 +19,25 @@ def uuid_pk() -> Mapped[uuid.UUID]:
 
 def created_at() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+# A worker task not finished this long after it was queued is taken as lost (the worker died or
+# restarted mid-task): the page stops waiting and offers to try again, at no cost (M10).
+LOST_AFTER = timedelta(minutes=5)
+
+
+def requested_at() -> Mapped[datetime]:
+    """When the task was last queued (set again when it's retried)."""
+    return mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+
+def is_lost(requested: datetime) -> bool:
+    return datetime.now(UTC) - requested > LOST_AFTER
 
 
 def str_enum[E: StrEnum](enum: type[E], name: str) -> SAEnum:

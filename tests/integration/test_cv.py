@@ -5,7 +5,7 @@ and the PDF/DOCX downloads."""
 import io
 import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import docx
@@ -13,7 +13,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from pypdf import PdfReader
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mentor.ai.adapters.fake import FakeAI
@@ -301,7 +301,7 @@ async def test_the_free_plan_quota_applies(
     page = (await client.get(f"/vagas/{job.id}")).text
     response = await _generate(client, job)
 
-    assert "Currículos restantes hoje: 0 de 10" in page
+    assert "Currículos restantes na sua conta: 0 de 10" in page
     assert response.status_code == 429 and queue.cvs == []
 
 
@@ -534,3 +534,35 @@ async def test_deleting_the_job_deletes_its_cvs(
     await client.delete(f"/vagas/{job.id}", headers={"X-CSRF-Token": token})
 
     assert await db.scalar(select(CV.id).where(CV.id == cv.id)) is None
+
+
+async def test_a_lost_version_offers_a_free_retry(
+    client: AsyncClient, db: AsyncSession, fake_ai: FakeAI, queue: RecordingQueue
+) -> None:
+    """M10: a version the worker lost stops polling and can be queued again, uncounted."""
+    user = await _user(client, db)
+    await _profile(db, fake_ai, user)
+    job = await _job(db, user)
+    await _generate(client, job)
+    [cv] = await _cvs(db, job)
+    cv.requested_at = datetime.now(UTC) - timedelta(minutes=6)
+    await db.commit()
+    token = csrf_from((await client.get(f"/vagas/{job.id}")).text)
+
+    page = (await client.get(f"/curriculos/{cv.id}")).text
+    job_page = (await client.get(f"/vagas/{job.id}")).text
+    retry = await client.post(
+        f"/curriculos/{cv.id}/tentar-novamente",
+        headers={"X-CSRF-Token": token, "HX-Request": "true"},
+    )
+
+    assert "Este currículo parou no meio do caminho." in page and "every 2s" not in page
+    assert "Falhou" in job_page
+    assert queue.cvs == [cv.id, cv.id]
+    assert "Escrevendo seu currículo" in retry.text
+    used = await db.scalar(
+        select(func.sum(UsageEvent.amount)).where(
+            UsageEvent.user_id == user.id, UsageEvent.kind == QuotaKind.CV_GENERATION
+        )
+    )
+    assert used == 1

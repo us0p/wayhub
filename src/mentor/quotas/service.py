@@ -1,39 +1,21 @@
-"""Usage quotas (D18, D31, D39).
+"""Usage quotas (D18, D31, D85).
 
-Limits come from the user's plan, unless `user.quota_override` has the kind as a key
-(int = custom limit, null = unlimited). Daily windows reset at midnight America/Sao_Paulo;
-voice seconds are a lifetime allowance.
+Every limit is a lifetime total per account, never reset (D85). Limits come from the user's
+plan, unless `user.quota_override` has the kind as a key (int = custom limit, null =
+unlimited): that's how an admin gives a user more, until buying credits exists.
 
-Note: check-then-record is not atomic; two concurrent requests can overshoot a limit by one
-action. Acceptable for cost control at MVP scale.
+`check` takes a per-user advisory lock held until the transaction ends, so a check, the action
+and its `record` in one transaction can't interleave with another request of the same user:
+with no next day to absorb it, a lifetime limit must not be overshot by concurrent requests.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
-from enum import StrEnum
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mentor.auth.models import Plan, User
-from mentor.auth.sessions import now
 from mentor.quotas.models import QuotaKind, UsageEvent
-
-LOCAL_TZ = ZoneInfo("America/Sao_Paulo")
-
-
-class Window(StrEnum):
-    DAILY = "daily"
-    LIFETIME = "lifetime"
-
-
-WINDOWS: dict[QuotaKind, Window] = {
-    QuotaKind.INTERVIEW_TURN: Window.DAILY,
-    QuotaKind.JOB_IMPORT: Window.DAILY,
-    QuotaKind.CV_GENERATION: Window.DAILY,
-    QuotaKind.VOICE_SECONDS: Window.LIFETIME,
-}
 
 _UNLIMITED: dict[QuotaKind, int | None] = dict.fromkeys(QuotaKind, None)
 
@@ -54,7 +36,6 @@ class QuotaStatus:
     kind: QuotaKind
     limit: int | None  # None = unlimited
     used: int
-    resets_at: datetime | None  # None = lifetime allowance
 
     @property
     def remaining(self) -> int | None:
@@ -74,27 +55,24 @@ def effective_limit(user: User, kind: QuotaKind) -> int | None:
     return PLAN_LIMITS[user.plan][kind]
 
 
-def _window_bounds(kind: QuotaKind, at: datetime) -> tuple[datetime | None, datetime | None]:
-    if WINDOWS[kind] is Window.LIFETIME:
-        return None, None
-    local_day = at.astimezone(LOCAL_TZ).date()
-    start = datetime.combine(local_day, time.min, tzinfo=LOCAL_TZ)
-    return start, start + timedelta(days=1)
-
-
 async def status(db: AsyncSession, user: User, kind: QuotaKind) -> QuotaStatus:
-    start, end = _window_bounds(kind, now())
     query = select(func.coalesce(func.sum(UsageEvent.amount), 0)).where(
         UsageEvent.user_id == user.id, UsageEvent.kind == kind
     )
-    if start is not None:
-        query = query.where(UsageEvent.created_at >= start)
     used = int(await db.scalar(query) or 0)
-    return QuotaStatus(kind=kind, limit=effective_limit(user, kind), used=used, resets_at=end)
+    return QuotaStatus(kind=kind, limit=effective_limit(user, kind), used=used)
+
+
+def lock_key(user: User) -> int:
+    """The user's advisory lock key: the first 8 bytes of the id, as a signed bigint."""
+    return int.from_bytes(user.id.bytes[:8], "big", signed=True)
 
 
 async def check(db: AsyncSession, user: User, kind: QuotaKind, amount: int = 1) -> QuotaStatus:
-    """Raise `QuotaExceededError` if `amount` more units would pass the limit."""
+    """Raise `QuotaExceededError` if `amount` more units would pass the limit. Holds the user's
+    lock until the transaction ends: record the usage in the same transaction."""
+    if effective_limit(user, kind) is not None:
+        await db.execute(select(func.pg_advisory_xact_lock(lock_key(user))))
     current = await status(db, user, kind)
     if current.limit is not None and current.used + amount > current.limit:
         raise QuotaExceededError(current)

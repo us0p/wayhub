@@ -24,7 +24,7 @@
     class="mt-2 block h-2 w-full appearance-none overflow-hidden rounded-full bg-moss/40
            [&::-webkit-progress-bar]:bg-moss/40 [&::-webkit-progress-value]:rounded-full
            {{ '[&::-webkit-progress-value]:bg-danger [&::-moz-progress-bar]:bg-danger' if pct >= 100 else '[&::-webkit-progress-value]:bg-sage-strong [&::-moz-progress-bar]:bg-sage-strong' }}"></progress>
-  <p class="mt-1 text-xs text-taupe-strong">{{ _("Renova todo dia à meia-noite") if status.resets_at else _("Total da conta") }}</p>
+  <p class="mt-1 text-xs text-taupe-strong">{{ _("Total da conta, não renova") }}</p>
   {% endif %}
 </div>
 {% endmacro %}

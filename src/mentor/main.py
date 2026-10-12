@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 
-from mentor import health, worker
+from mentor import health, logs, worker
 from mentor.account import routes as account_routes
 from mentor.agents.checkpoint import close_checkpointer, get_checkpointer
 from mentor.ai.ports import AIConfigurationError
@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    logs.configure(settings.log_level)
     app = FastAPI(
         title="Mentor", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
     )
@@ -65,7 +66,7 @@ def create_app() -> FastAPI:
         same_site="lax",
         https_only=not settings.is_dev_like,
     )
-    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware, hsts=not settings.is_dev_like)
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(health.router)

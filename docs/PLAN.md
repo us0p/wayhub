@@ -17,8 +17,8 @@
 | 6. Voice interview | Done — branch `feat/m6-voice-interview` (D62–D76) |
 | 7. Job import | Done — PR #7 (`feat/m7-job-ingestion`, D78, D79): text, PDF, screenshots and links on the Procrastinate worker; read-only job page |
 | 8. Fit warning | Done — PR #8 (`feat/m8-fit-warning`, D80): per-requirement verdicts on the job page, analyzed right after import |
-| 9. CV generation | In progress, branch `feat/m9-cv-generation` (D81–D83): 9a generation + Model A verification (changes shown), CV page, PDF/DOCX, versions; 9b the editor (edit text, hide items). Awaiting PR |
-| 10 | Not started |
+| 9. CV generation | Done — PR #9 (`feat/m9-cv-generation`, D81–D83): generation + Model A verification (changes shown), CV page, PDF/DOCX, versions, editor (edit text, hide items) |
+| 10. Production | In progress — branch `feat/m10-production` (D84–D86): 10a and 10b done; 10c written (D89); 10d–10f next |
 
 ## Context
 Mentor Phase 1 (see `SCOPE.md`) is a candidate-focused career tool. This MVP delivers:
@@ -210,9 +210,57 @@ Each user turn:
 7. **Job ingestion** (text → PDF → screenshots → URL/Playwright + SSRF guard) on the Procrastinate worker.
 8. **Fit warning.**
 9. **CV generation + verification + editor + PDF/DOCX + history.**
-10. **Prod deploy**: compose.prod.yml + Caddy on the VPS/domain, Google OAuth prod redirect, backups (pg_dump cron),
-    `.github/workflows/deploy.yml` (GHCR push + SSH deploy + migrations; secrets: `VPS_HOST`, `VPS_USER`,
-    `VPS_SSH_KEY`, app env on the VPS only). Recommend branch protection on `main` requiring CI.
+10. **Production** (D84, D85): the home notebook behind a Cloudflare Tunnel at `mentor.nomach.dev`.
+    - **10a. App fixes found in the production review** — done (D86): lost job imports and CV
+      versions (after 5 min) offer an unmetered "Tentar de novo"; HSTS from the app in prod;
+      logging set up in the app and the worker (`LOG_LEVEL`). `/health` already checked the DB.
+      Moved to 10c: `FORWARDED_ALLOW_IPS=*` (requests reach the container from the Docker
+      gateway; safe since the port is bound to 127.0.0.1) and migrations as a deploy step.
+    - **10b. Lifetime limits (D85)** — done (D86): no daily window; per-user advisory lock in
+      `check`; "na sua conta" copy; terms updated (`TERMS_VERSION` 2026-10-11).
+    - **10c. Production stack** — written, not yet deployed (D89): `deploy/compose.prod.yml`,
+      `deploy/.env.prod.example`, `deploy/deploy.sh`, `deploy/egress.sh` + `mentor-egress.service`;
+      `WORKER_CONCURRENCY`; `Cache-Control: no-transform` on pages.
+      - `compose.prod.yml` in `/opt/mentor`: `db` (no published port, named volume), `app` (on
+        `127.0.0.1:8100`) and `worker` from GHCR (tag via `MENTOR_TAG`), `restart:
+        unless-stopped`, healthchecks, memory limits, log rotation; a `migrate` one-off service.
+        The host's existing `cloudflared` routes `mentor.nomach.dev` to `localhost:8100`.
+      - `.env` only on the notebook: `APP_ENV=prod`, new `SECRET_KEY`, Postgres password, prod
+        Google OAuth client, `PRIVACY_CONTACT_EMAIL`, `GEMINI_API_KEY`, `GOOGLE_CLOUD_PROJECT`,
+        the Speech/TTS service-account key mounted read-only (D69). A `.env.prod.example` lists
+        them; the owner's checklist is `docs/SETUP_PRODUCAO.md`.
+      - Cloudflare: tunnel routes `mentor.nomach.dev` → `http://localhost:8100` and an SSH
+        hostname → `ssh://localhost:22` (Access: service token only); a configuration rule for
+        `mentor.nomach.dev` turning off Rocket Loader, email obfuscation and other script
+        injection (CSP, D37).
+      - Notebook: no suspend on lid close / idle, Docker enabled at boot, automatic security
+        updates, no disk encryption (D88), SSH by key only, a `deploy` user in the `docker` group.
+      - Worker egress: a `DOCKER-USER` iptables rule dropping traffic from the compose network to
+        private ranges (the home LAN, router), backing the SSRF guard (D79).
+    - **10d. Deploy workflow** (`.github/workflows/deploy.yml`)
+      - On push to `main` after CI passes (`workflow_run`), in a `production` environment.
+      - Build and push `app` and `worker` to GHCR (tag = commit SHA, plus `main`).
+      - SSH through Cloudflare Access: install a checksum-verified `cloudflared`, service token
+        (`CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`), pinned `known_hosts`, a deploy key
+        locked to `command="/opt/mentor/deploy.sh",restrict` (the tag comes in
+        `SSH_ORIGINAL_COMMAND`, validated as a SHA). Secrets: `DEPLOY_HOST`, `DEPLOY_USER`,
+        `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`, the two Access secrets.
+      - On the notebook (a versioned `deploy/deploy.sh`): pull → `migrate` → `up -d` → poll
+        `/health` → on failure redeploy the previous tag and fail the job. Migrations stay
+        backward compatible for one release, so a rollback works.
+      - Branch protection on `main`: PRs only, CI required.
+    - **10e. Data, costs and monitoring**
+      - Backups: nightly `pg_dump -Fc` (systemd timer), 7 daily + 4 weekly, encrypted and copied
+        off the notebook; a restore rehearsed once before opening.
+      - Google Cloud: budget with alerts at 50/90/100% (alerts don't stop spending), per-API
+        quotas on Gemini, Speech and TTS as the real cap; a separate project for production.
+      - Google OAuth consent screen published (out of "Testing").
+      - Uptime monitor on `https://mentor.nomach.dev/health`; disk-space alert.
+    - **10f. Go-live check**: `pytest -m contract` with the prod credentials; one full run on
+      production with a test account (text and voice interview, job by link/text/print, fit, CV,
+      edit, downloads, account deletion); the privacy policy reviewed for the home hosting (no
+      "provedor de hospedagem", no claim of encryption at rest on the server (D88); Cloudflare and the backup storage as operators); `docs/RUNBOOK.md` (deploy, rollback, restore, rotate
+      secrets, admin CLI through `docker compose exec`).
 
 ## Possible improvements (not scheduled)
 - **Mari: a lighter, more natural voice and wording (to do, from M6 testing, D77).** It works
@@ -239,6 +287,6 @@ Each user turn:
 - Manual: real voice interview on a phone over HTTPS (mic permission, barge-in, deny mic → text fallback);
   job URLs from Gupy, Greenhouse, a LinkedIn URL (expect manual fallback); open the PDF in an ATS parser check.
 - Model A check: seeded profile without skill X + job requiring X → assert X never appears as experience in the CV.
-- Quota: a `free` user hits the limit; a `tester` never does. Voice: a `free` user with 29.5 min used
+- Quota: a `free` user hits a lifetime limit and it stays hit the next day; a `tester` never does. Voice: a `free` user with 29.5 min used
   gets the `voice_limit_reached` warning and continues in text.
-- CI: open a PR → all jobs green; a deliberate lint/test failure blocks it. CD: merge → new image on the VPS, `/health` OK.
+- CI: open a PR → all jobs green; a deliberate lint/test failure blocks it. CD: merge → new image on the notebook, `https://mentor.nomach.dev/health` OK; a failing `/health` rolls back.

@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mentor.db import Base
-from mentor.models import created_at, str_enum, uuid_pk
+from mentor.models import created_at, is_lost, requested_at, str_enum, uuid_pk
 
 
 class CVStatus(StrEnum):
@@ -42,4 +42,10 @@ class CV(Base):
     content: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # `CVContent`
     changes: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)  # `[Change]`
     created_at: Mapped[datetime] = created_at()
+    requested_at: Mapped[datetime] = requested_at()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    @property
+    def lost(self) -> bool:
+        """Still pending long after it was queued: the worker lost it (M10)."""
+        return self.status is CVStatus.PENDING and is_lost(self.requested_at)
