@@ -54,10 +54,12 @@ async def job_list(request: Request, db: DB, user: CurrentUser) -> Response:
 
 @router.get("/nova", response_class=HTMLResponse)
 async def new_job(request: Request, db: DB, user: CurrentUser) -> Response:
+    """`?colar=1` comes from a link that couldn't be read (D91): the form opens focused on the
+    field, asking for the text or prints."""
     quota = await quotas.status(db, user, QuotaKind.JOB_IMPORT)
-    return templates.TemplateResponse(
-        request, "jobs/new.html", {"active_nav": "jobs", "quota": quota, "text": "", "error": None}
-    )
+    paste = request.query_params.get("colar") == "1"
+    context = {"active_nav": "jobs", "quota": quota, "text": "", "error": None, "paste": paste}
+    return templates.TemplateResponse(request, "jobs/new.html", context)
 
 
 @router.post("", response_class=HTMLResponse)

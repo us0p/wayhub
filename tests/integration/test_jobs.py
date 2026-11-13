@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -332,6 +333,7 @@ async def test_screenshots_are_read_in_one_call_and_then_deleted(
 
     [job] = await _jobs(db, user)
     assert job.status is JobStatus.READY and job.source_text == POSTING
+    assert await _imports(db, user) == 1  # a posting read successfully still counts
     assert await _uploads(db, job) == 0  # D29
     [transcribe] = [c for c in fake_ai.chat.calls if c.schema is None]
     blocks = transcribe.messages[-1].content
@@ -409,6 +411,7 @@ async def test_a_scanned_pdf_is_read_by_the_model(
 
     [job] = await _jobs(db, user)
     assert job.status is JobStatus.READY and job.source_text == POSTING
+    assert await _imports(db, user) == 1  # a posting read successfully still counts
     [transcribe] = [c for c in fake_ai.chat.calls if c.schema is None]
     blocks = transcribe.messages[-1].content
     assert isinstance(blocks, list)
@@ -427,7 +430,8 @@ async def test_a_broken_pdf_asks_for_the_text(
     [job] = await _jobs(db, user)
     assert (job.status, job.status_reason) == (JobStatus.NEEDS_MANUAL, "pdf_unreadable")
     page = (await client.get(f"/vagas/{job.id}")).text
-    assert "Não consegui ler esse PDF" in page and "Cole o texto da vaga" in page
+    assert "Não consegui ler esse PDF" in page and "Copie o texto da vaga" in page
+    assert await _imports(db, user) == 0
 
 
 async def test_a_link_that_cant_be_read_asks_for_the_text(
@@ -451,7 +455,61 @@ async def test_a_link_that_cant_be_read_asks_for_the_text(
     [job] = await _jobs(db, user)
     assert (job.status, job.status_reason) == (JobStatus.NEEDS_MANUAL, "blocked")
     page = (await client.get(f"/vagas/{job.id}")).text
-    assert "pediu login" in page and "https://www.linkedin.com/jobs/view/123" in page
+    assert "esse site bloqueia leituras automáticas" in page
+    assert "https://www.linkedin.com/jobs/view/123" in page
+    # No model was called, so the import is given back, and the page says so (D91).
+    assert await _imports(db, user) == 0
+    assert "não contou no seu limite" in page
+    assert 'href="/vagas/nova?colar=1"' in page
+    form = (await client.get("/vagas/nova?colar=1")).text
+    assert "autofocus" in form and "copie todo o texto" in form
+
+
+async def test_a_page_blocked_by_an_antibot_check_gives_the_import_back(
+    client: AsyncClient,
+    db: AsyncSession,
+    queue: RecordingQueue,
+    fake_ai: FakeAI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Indeed answers 403 with a captcha page (issue 12): blocked, with nothing to count."""
+    user = await _user(client, db)
+    await _submit(client, "https://br.indeed.com/viewjob?jk=937c03ac4d157586")
+    [job] = await _jobs(db, user)
+    real_page_text = fetch.page_text
+
+    async def resolver(host: str, port: int) -> list[str]:
+        return ["93.184.216.34"]
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(403, html="Security Check"))
+
+    async def page(url: str) -> str:
+        return await real_page_text(url, resolver=resolver, transport=transport)
+
+    monkeypatch.setattr(fetch, "page_text", page)
+
+    await service.process(db, fake_ai, job.id)
+
+    [job] = await _jobs(db, user)
+    assert (job.status, job.status_reason) == (JobStatus.NEEDS_MANUAL, "blocked")
+    assert fake_ai.chat.calls == []
+    assert await _imports(db, user) == 0
+
+
+async def test_a_posting_that_needed_the_model_still_counts(
+    client: AsyncClient, db: AsyncSession, queue: RecordingQueue, fake_ai: FakeAI
+) -> None:
+    user = await _user(client, db)
+    await _submit(client, "", [("vaga.png", PNG, "image/png")])
+    [job] = await _jobs(db, user)
+    fake_ai.chat.script("SEM VAGA")
+
+    await service.process(db, fake_ai, job.id)
+
+    [job] = await _jobs(db, user)
+    assert job.status is JobStatus.NOT_A_JOB and not job.given_back
+    assert await _imports(db, user) == 1
+    assert "não contou" not in (await client.get(f"/vagas/{job.id}")).text
 
 
 async def test_a_readable_link_is_imported(
@@ -476,6 +534,7 @@ async def test_a_readable_link_is_imported(
 
     [job] = await _jobs(db, user)
     assert job.status is JobStatus.READY and job.source_text == POSTING
+    assert await _imports(db, user) == 1  # a posting read successfully still counts
 
 
 # -- pages ---------------------------------------------------------------------------------

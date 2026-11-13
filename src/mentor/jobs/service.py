@@ -30,6 +30,8 @@ from mentor.jobs.models import (
 )
 from mentor.jobs.schemas import ParsedJob
 from mentor.models import fit_to_column as _fit
+from mentor.quotas import service as quotas
+from mentor.quotas.models import QuotaKind
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +137,9 @@ async def process(db: AsyncSession, ai: AI, job_id: uuid.UUID) -> None:
         _store(db, job, parsed)
     except NeedsManualError as exc:
         job.status, job.status_reason = JobStatus.NEEDS_MANUAL, exc.reason
+        if job.given_back:
+            # In the same commit as the status, so it happens once even if the task reruns.
+            await quotas.give_back(db, job.user_id, QuotaKind.JOB_IMPORT)
     except NotAJobError:
         job.status = JobStatus.NOT_A_JOB
     except Exception as exc:

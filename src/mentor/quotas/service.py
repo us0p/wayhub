@@ -9,6 +9,7 @@ and its `record` in one transaction can't interleave with another request of the
 with no next day to absorb it, a lifetime limit must not be overshot by concurrent requests.
 """
 
+import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -81,6 +82,13 @@ async def check(db: AsyncSession, user: User, kind: QuotaKind, amount: int = 1) 
 
 async def record(db: AsyncSession, user: User, kind: QuotaKind, amount: int = 1) -> None:
     db.add(UsageEvent(user_id=user.id, kind=kind, amount=amount))
+    await db.flush()
+
+
+async def give_back(db: AsyncSession, user_id: uuid.UUID, kind: QuotaKind, amount: int = 1) -> None:
+    """Return units recorded earlier, as a negative event (D91): e.g. a job import that ended
+    before any model was called. Takes a user id, since the worker has no `User` at hand."""
+    db.add(UsageEvent(user_id=user_id, kind=kind, amount=-amount))
     await db.flush()
 
 
