@@ -333,3 +333,98 @@ async def test_a_slow_reply_keeps_the_connection_alive_with_heartbeats(
 
     assert body.startswith(": ping\n\n")
     assert "event: done" in body
+
+
+# -- long pasted texts (D92) ---------------------------------------------------------------
+
+
+async def _post_with(
+    client: AsyncClient, token: str, text: str, attachment: str
+) -> tuple[int, str]:
+    response = await client.post(
+        "/entrevista/turnos",
+        data={"texto": text, "anexo": attachment},
+        headers={"X-CSRF-Token": token},
+    )
+    return response.status_code, response.text
+
+
+async def _used_turns(db: AsyncSession, user: User) -> int:
+    return (await quotas.status(db, user, QuotaKind.INTERVIEW_TURN)).used
+
+
+async def test_a_long_paste_is_stored_whole_and_counted_by_size(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    token, user = await _start(client, db)
+    cv = "Experiência na Acme como desenvolvedora.\n" * 300  # 12.300 caracteres
+
+    status, html = await _post_with(client, token, "Segue meu currículo.", cv)
+
+    assert status == 200
+    turn = await db.scalar(
+        select(InterviewTurn).where(
+            InterviewTurn.user_id == user.id, InterviewTurn.role == TurnRole.USER
+        )
+    )
+    assert turn is not None
+    assert (turn.text, turn.attachment_text) == ("Segue meu currículo.", cv.strip())
+    assert await _used_turns(db, user) == 4  # ceil(12.299 / 4.000)
+    # The bubble shows the message and the text collapsed.
+    assert "Segue meu currículo." in html and "<details" in html
+    assert "Texto colado · 12.299 caracteres" in html
+    page = (await client.get("/entrevista")).text
+    assert "Texto colado · 12.299 caracteres" in page
+
+
+async def test_an_attachment_alone_can_be_sent(client: AsyncClient, db: AsyncSession) -> None:
+    token, user = await _start(client, db)
+
+    status, _ = await _post_with(client, token, "", "Sobre mim: " + "x" * 5000)
+
+    assert status == 200
+    assert await _used_turns(db, user) == 2
+
+
+@pytest.mark.parametrize(
+    ("text", "attachment"),
+    [("x" * 4001, ""), ("Oi", "x" * 40_001)],
+)
+async def test_over_the_limit_is_refused_never_cut(
+    client: AsyncClient, db: AsyncSession, text: str, attachment: str
+) -> None:
+    token, user = await _start(client, db)
+
+    status, html = await _post_with(client, token, text, attachment)
+
+    assert status == 422
+    assert "longa demais" in html
+    turns = await db.scalar(
+        select(func.count()).where(
+            InterviewTurn.user_id == user.id, InterviewTurn.role == TurnRole.USER
+        )
+    )
+    assert turns == 0 and await _used_turns(db, user) == 0
+
+
+async def test_an_attachment_costing_more_than_what_is_left_is_refused(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    token, user = await _start(client, db)
+    await quotas.record(db, user, QuotaKind.INTERVIEW_TURN, 148)
+
+    status, html = await _post_with(client, token, "", "x" * 12_000)
+
+    assert status == 429
+    assert "restam 2" in html
+
+
+async def test_the_composer_offers_the_attachment_and_the_counter(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    await _start(client, db)
+
+    page = (await client.get("/entrevista")).text
+
+    assert 'id="anexo" name="anexo"' in page and 'hx-include="#texto, #anexo"' in page
+    assert 'id="texto-counter"' in page and 'data-cost-many="conta como {n} mensagens"' in page

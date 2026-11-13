@@ -44,7 +44,8 @@
 <div id="job-body" role="status" class="mt-6 rounded-[var(--radius-card)] bg-cream p-6">
   {% if job.status == "needs_manual" %}
   <p class="font-semibold">{{ J.manual_reasons.get(job.status_reason, _("Não consegui ler essa vaga.")) }}</p>
-  <p class="mt-2 text-sm text-taupe-strong">{{ _("Cole o texto da vaga ou envie prints do anúncio, que eu leio daqui.") }}</p>
+  <p class="mt-2 text-sm text-taupe-strong">{{ _("Copie o texto da vaga ou envie prints do anúncio (até 5), que eu leio daqui.") }}</p>
+  {% if job.given_back %}<p class="mt-2 text-sm text-taupe-strong">{{ _("Essa tentativa não contou no seu limite.") }}</p>{% endif %}
   {% elif job.status == "not_a_job" %}
   <p class="font-semibold">{{ _("Isso não parece ser uma vaga de emprego.") }}</p>
   <p class="mt-2 text-sm text-taupe-strong">{{ _("Confira o link ou o arquivo e tente de novo com o anúncio da vaga.") }}</p>
@@ -52,6 +53,6 @@
   <p class="font-semibold">{{ _("Não consegui ler essa vaga agora.") }}</p>
   <p class="mt-2 text-sm text-taupe-strong">{{ _("Tente importar de novo daqui a pouco. Se continuar, cole o texto da vaga.") }}</p>
   {% endif %}
-  <a href="/vagas/nova" class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Importar de novo") }}</a>
+  <a href="/vagas/nova{% if job.status == 'needs_manual' %}?colar=1{% endif %}" class="mt-4 inline-flex items-center justify-center rounded-full bg-sage px-5 py-2.5 text-sm font-semibold text-ink shadow transition active:scale-95">{{ _("Importar de novo") }}</a>
 </div>
 {% endif %}

@@ -21,7 +21,7 @@
         {# column-reverse keeps the view anchored at the newest message, without JavaScript. #}
         <div class="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto">
           <div id="transcript" class="flex flex-col gap-3 py-2" aria-live="polite">
-            {% for turn in turns %}{{ bubble(turn.role.value, turn.text, "turn-" ~ turn.id) }}{% endfor %}
+            {% for turn in turns %}{{ bubble(turn.role.value, turn.text, "turn-" ~ turn.id, turn.attachment_text) }}{% endfor %}
             {% if pending %}{{ pending_bubble(pending) }}{% endif %}
           </div>
         </div>

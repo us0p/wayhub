@@ -67,6 +67,9 @@ class TurnContext:
     snapshot: profile_service.Snapshot
     progress: Progress
     turn_id: uuid.UUID
+    # The text the user attached to this turn (D92): plan and extract read it in full, only
+    # now; the history shows a placeholder, and speak never sees it.
+    attachment: str | None = None
 
 
 def _last(messages: list[BaseMessage], kind: str) -> BaseMessage | None:
@@ -82,6 +85,7 @@ async def plan(state: InterviewState, runtime: Runtime[TurnContext]) -> dict[str
                 profile=profile_service.render(ctx.snapshot),
                 checklist=prompts.checklist_text(ctx.progress),
                 transcript=prompts.transcript(state["messages"]),
+                attachment=prompts.attachment_block(ctx.attachment),
             )
         ),
     ]
@@ -126,6 +130,7 @@ async def extract(state: InterviewState, runtime: Runtime[TurnContext]) -> dict[
                 checklist=prompts.checklist_text(ctx.progress),
                 question=question.text if question else "",
                 message=message.text.replace("</mensagem>", "") if message else "",
+                attachment=prompts.attachment_block(ctx.attachment),
             )
         ),
     ]

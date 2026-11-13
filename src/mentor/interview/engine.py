@@ -10,6 +10,7 @@ by one `ReplyDone` or `ReplyFailed`.
 
 import asyncio
 import logging
+import math
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -35,7 +36,7 @@ from mentor.ai.errors import describe
 from mentor.auth.models import User
 from mentor.auth.sessions import now
 from mentor.i18n import gettext_ as _
-from mentor.interview import store
+from mentor.interview import prompts, store
 from mentor.interview.agent import InterviewState, TurnContext, build_graph
 from mentor.interview.checklist import Progress
 from mentor.interview.models import (
@@ -50,7 +51,9 @@ from mentor.profile import service as profile_service
 log = logging.getLogger(__name__)
 
 HISTORY_TURNS = 30  # recent turns the agent sees; the profile summary covers the rest
-MAX_TURN_CHARS = 4000
+MAX_TURN_CHARS = 4000  # a typed message; a longer paste becomes an attachment (D92)
+MAX_ATTACHMENT_CHARS = 40_000  # ~10k tokens
+ATTACHMENT_CHARS_PER_MESSAGE = 4000  # an attachment costs ceil(chars / this) text messages
 # A reply that started this long ago without finishing is considered dead and may be retried.
 STALE_REPLY = timedelta(minutes=2)
 WAIT_POLL_SECONDS = 1.0  # how often a second stream checks on a reply being generated
@@ -85,6 +88,24 @@ class TurnPendingError(Exception):
     """The previous user turn has no reply yet."""
 
 
+class TurnTooLongError(ValueError):
+    """The message or its attachment is over the limit: refused, never cut (D92)."""
+
+
+def turn_cost(attachment: str | None) -> int:
+    """Text messages a turn counts against the quota: one, or one per started
+    `ATTACHMENT_CHARS_PER_MESSAGE` characters of its attachment (D92)."""
+    if not attachment:
+        return 1
+    return max(1, math.ceil(len(attachment) / ATTACHMENT_CHARS_PER_MESSAGE))
+
+
+def check_turn(text: str, attachment: str | None) -> None:
+    """Raise `TurnTooLongError` for a typed message or attachment over its limit."""
+    if len(text) > MAX_TURN_CHARS or len(attachment or "") > MAX_ATTACHMENT_CHARS:
+        raise TurnTooLongError
+
+
 def greeting(user: User) -> str:
     return _(
         "Oi %(name)s, sou a Mari e vou ser sua Mentora nessa entrevista. Vou te fazer "
@@ -115,9 +136,16 @@ def _abandoned(turn: InterviewTurn) -> bool:
 
 
 def as_message(turn: InterviewTurn) -> BaseMessage:
-    """Our turn as a LangChain message; the turn id makes the merge into state idempotent."""
+    """Our turn as a LangChain message; the turn id makes the merge into state idempotent.
+
+    An attachment shows only as a placeholder: the agent reads it in full through
+    `TurnContext.attachment`, in its own turn only (D92)."""
     if turn.role is TurnRole.USER:
-        return HumanMessage(content=turn.text, id=str(turn.id))
+        text = turn.text
+        if turn.attachment_text:
+            note = prompts.attachment_placeholder(len(turn.attachment_text))
+            text = f"{text}\n{note}" if text else note
+        return HumanMessage(content=text, id=str(turn.id))
     return AIMessage(content=turn.text, id=str(turn.id))
 
 
@@ -201,8 +229,18 @@ class InterviewEngine:
     # -- turns -------------------------------------------------------------------------------
 
     async def add_user_turn(
-        self, interview: Interview, text: str, mode: TurnMode = TurnMode.TEXT
+        self,
+        interview: Interview,
+        text: str,
+        mode: TurnMode = TurnMode.TEXT,
+        attachment: str | None = None,
     ) -> InterviewTurn:
+        """Store the user's message whole: a typed message or attachment over the limit is
+        refused (`TurnTooLongError`), never cut (D92). Voice transcripts aren't limited:
+        speech is bounded by the voice minutes."""
+        text, attachment = text.strip(), (attachment or "").strip() or None
+        if mode is TurnMode.TEXT:
+            check_turn(text, attachment)
         if await self.pending_turn(interview) is not None:
             raise TurnPendingError
         turn = InterviewTurn(
@@ -210,7 +248,8 @@ class InterviewEngine:
             user_id=self.user.id,
             role=TurnRole.USER,
             mode=mode,
-            text=text.strip()[:MAX_TURN_CHARS],
+            text=text,
+            attachment_text=attachment,
         )
         self.db.add(turn)
         await self.db.commit()
@@ -288,6 +327,7 @@ class InterviewEngine:
             snapshot=await profile_service.snapshot(self.db, self.user),
             progress=await self.progress(),
             turn_id=turn.id,
+            attachment=turn.attachment_text,
         )
         recent = await self._history(interview)
         inputs: InterviewState = {

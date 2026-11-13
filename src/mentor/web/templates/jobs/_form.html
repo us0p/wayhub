@@ -4,9 +4,11 @@
 <form id="job-form" hx-post="/vagas" hx-encoding="multipart/form-data" hx-target="this" hx-swap="outerHTML"
       hx-disabled-elt="find button[type=submit]" class="mt-6 space-y-4">
   <div>
-    <label for="entrada" class="text-sm font-medium">{{ _("Link ou texto da vaga") }}</label>
+    <label for="entrada" class="text-sm font-medium">{{ _("Texto da vaga") if paste else _("Link ou texto da vaga") }}</label>
+    {% if paste %}<p id="job-form-hint" class="mt-1 text-xs text-taupe-strong">{{ _("Abra o anúncio, copie todo o texto e cole aqui, ou anexe prints da tela (até 5).") }}</p>{% endif %}
     <textarea id="entrada" name="entrada" rows="6" maxlength="50000"
-              placeholder="{{ _('Cole aqui o link do anúncio ou o texto completo da vaga…') }}"
+              placeholder="{{ _('Cole aqui o texto completo da vaga…') if paste else _('Cole aqui o link do anúncio ou o texto completo da vaga…') }}"
+              {% if paste %}autofocus{% endif %}
               {% if error %}aria-invalid="true" aria-describedby="job-form-error"{% endif %}
               class="mt-2 block w-full resize-y rounded-3xl border border-moss bg-surface px-4 py-3 text-sm focus:border-sage-strong focus:outline-none">{{ text }}</textarea>
   </div>

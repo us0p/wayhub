@@ -55,6 +55,12 @@ class RequirementKind(StrEnum):
     OTHER = "other"
 
 
+# `needs_manual` reasons reached before any model was called: the import is given back (D91).
+GIVEN_BACK_REASONS = frozenset(
+    {"blocked", "unreachable", "not_html", "unsafe", "too_big", "pdf_unreadable"}
+)
+
+
 class JobPosting(Base):
     __tablename__ = "job_postings"
     __table_args__ = (Index("ix_job_postings_user_seq", "user_id", "seq"),)
@@ -93,6 +99,11 @@ class JobPosting(Base):
         passive_deletes=True,
         order_by="JobRequirement.position",
     )
+
+    @property
+    def given_back(self) -> bool:
+        """Ended before any model was called, so the import didn't count (D91)."""
+        return self.status is JobStatus.NEEDS_MANUAL and self.status_reason in GIVEN_BACK_REASONS
 
     @property
     def lost(self) -> bool:

@@ -6,11 +6,78 @@ const touchScreen = window.matchMedia("(pointer: coarse)");
 document.addEventListener("keydown", (event) => {
   const target = event.target;
   if (target.id !== "texto" || event.key !== "Enter" || event.shiftKey || event.isComposing) return;
-  if (touchScreen.matches || target.disabled || !target.value.trim()) return;
+  const attached = document.getElementById("anexo")?.value;
+  if (touchScreen.matches || target.disabled || !(target.value.trim() || attached)) return;
   const button = target.closest("#composer")?.querySelector("[data-send]");
   if (!button || button.disabled) return;
   event.preventDefault();
   button.click();
+});
+
+// Interview attachments (D92): a paste that would push the message past the field's limit
+// becomes an attachment chip instead of being cut, so a whole CV or LinkedIn section can be
+// sent; the user can still type a short message next to it. One per message. The strings
+// come from #attachment's data attributes (templates/components/chat.html).
+const formatNumber = (n) => n.toLocaleString("pt-BR");
+const attachmentError = (box, message) => {
+  const error = box.querySelector("[data-attachment-error]");
+  error.textContent = message || "";
+  error.classList.toggle("hidden", !message);
+};
+const setAttachment = (box, text) => {
+  const field = box.querySelector("#anexo");
+  field.value = text;
+  box.hidden = !text;
+  if (!text) return;
+  const parts = Number(box.dataset.charsPerMessage) || 4000;
+  const cost = Math.ceil(text.length / parts);
+  const costText =
+    cost === 1 ? box.dataset.costOne : box.dataset.costMany.replace("{n}", formatNumber(cost));
+  box.querySelector("[data-attachment-label]").textContent =
+    `${box.dataset.label.replace("{n}", formatNumber(text.length))} · ${costText}`;
+};
+document.addEventListener("paste", (event) => {
+  const field = event.target;
+  const box = document.getElementById("attachment");
+  if (field.id !== "texto" || !box || field.disabled) return;
+  const pasted = event.clipboardData?.getData("text/plain") ?? "";
+  const kept = field.value.length - (field.selectionEnd - field.selectionStart);
+  if (kept + pasted.length <= field.maxLength) return; // fits: a normal paste
+  event.preventDefault();
+  if (box.querySelector("#anexo").value) {
+    box.hidden = false;
+    attachmentError(box, box.dataset.onlyOne);
+  } else if (pasted.trim().length > Number(box.dataset.max)) {
+    box.hidden = false;
+    attachmentError(box, box.dataset.tooLong);
+  } else {
+    attachmentError(box, "");
+    setAttachment(box, pasted.trim());
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-attachment-remove]")) return;
+  const box = document.getElementById("attachment");
+  attachmentError(box, "");
+  setAttachment(box, "");
+  document.getElementById("texto")?.focus();
+});
+
+// The message's character counter: shown near the limit, so the field's maxlength never cuts
+// a typed message without the user seeing it.
+const COUNTER_FROM = 0.9;
+document.addEventListener("input", (event) => {
+  const field = event.target;
+  const counter = field.id === "texto" && document.getElementById("texto-counter");
+  if (!counter) return;
+  const near = field.value.length >= field.maxLength * COUNTER_FROM;
+  counter.classList.toggle("invisible", !near);
+  const full = field.value.length >= field.maxLength;
+  counter.classList.toggle("text-danger", full);
+  counter.classList.toggle("text-taupe-strong", !full);
+  counter.textContent = near
+    ? counter.dataset.template.replace("{n}", formatNumber(field.value.length))
+    : "";
 });
 
 // Confirmation modal: a button with data-confirm="message" opens it; "yes" fires the button's
