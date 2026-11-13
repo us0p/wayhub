@@ -29,6 +29,14 @@ def _local_date(value: datetime) -> str:
 _env.filters["local_date"] = _local_date
 
 
+def _thousands(value: int) -> str:
+    """12345 → "12.345", the pt-BR way."""
+    return f"{value:,}".replace(",", ".")
+
+
+_env.filters["thousands"] = _thousands
+
+
 def _request_context(request: Request) -> dict[str, Any]:
     """Available in every template: the signed-in user and the CSRF token for htmx."""
     from mentor.auth.sessions import csrf_token_for

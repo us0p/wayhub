@@ -60,6 +60,9 @@ class InterviewTurn(Base):
         str_enum(TurnMode, "turn_mode"), default=TurnMode.TEXT, server_default=TurnMode.TEXT.value
     )
     text: Mapped[str] = mapped_column(Text)
+    # User turns: a long pasted text sent along with the message (D92), up to
+    # `MAX_ATTACHMENT_CHARS`. The agent reads it in full only in the turn it arrives.
+    attachment_text: Mapped[str | None] = mapped_column(Text)
     # Assistant turns: the user turn they answer (one reply per user turn).
     reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("interview_turns.id", ondelete="CASCADE"), unique=True

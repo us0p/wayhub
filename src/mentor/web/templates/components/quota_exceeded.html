@@ -2,6 +2,11 @@
 <div role="alert" class="rounded-2xl bg-cream p-4 text-sm">
   <p class="font-semibold">{{ _("Limite atingido") }}: {{ quota_label(status.kind) }}</p>
   <p class="mt-1 text-taupe-strong">
+    {% if status.remaining %}
+    {# A costlier action (a long attachment, D92) than what is left. #}
+    {{ _("Isso conta mais do que resta do limite da sua conta (restam %(n)s).", n=status.remaining) }}
+    {% else %}
     {{ _("Você usou todo o limite disponível para a sua conta.") }}
+    {% endif %}
   </p>
 </div>

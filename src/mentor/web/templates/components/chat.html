@@ -1,10 +1,17 @@
 {# Interview chat components (D27 styling shared with the M6 voice UI). #}
 
-{% macro bubble(role, text, id=None) %}
+{# `attachment`: a long text the user pasted with the message (D92), shown collapsed. #}
+{% macro bubble(role, text, id=None, attachment=None) %}
 {% if role == "user" %}
 <article {% if id %}id="{{ id }}"{% endif %} class="ml-auto max-w-[85%] rounded-3xl rounded-br-lg bg-ink px-4 py-3 text-sm leading-relaxed text-cream md:max-w-[75%]">
   <h3 class="sr-only">{{ _("Você") }}</h3>
-  <p class="whitespace-pre-line">{{ text }}</p>
+  {% if text or not attachment %}<p class="whitespace-pre-line">{{ text }}</p>{% endif %}
+  {% if attachment %}
+  <details class="{{ 'mt-2 ' if text else '' }}rounded-2xl bg-cream/10 px-3 py-2">
+    <summary class="cursor-pointer text-xs font-medium">{{ _("Texto colado · %(n)s caracteres", n=attachment | length | thousands) }}</summary>
+    <p class="mt-2 max-h-80 overflow-y-auto whitespace-pre-line break-words text-xs">{{ attachment }}</p>
+  </details>
+  {% endif %}
 </article>
 {% else %}
 <article {% if id %}id="{{ id }}"{% endif %} class="mr-auto max-w-[85%] rounded-3xl rounded-bl-lg bg-cream px-4 py-3 text-sm leading-relaxed md:max-w-[75%]">
@@ -100,6 +107,26 @@
   {% else %}
   {# No <form>: a click before htmx has loaded does nothing, instead of a native submit
      that reloads the page and loses the message. #}
+  {# A paste that would pass the field's limit becomes this attachment (static/js/app.js,
+     D92): one per message, sent as `anexo`. The strings live here so they go through _(). #}
+  <div id="attachment" hidden class="mb-2"
+       data-max="40000" data-chars-per-message="4000"
+       data-label="{{ _('Texto colado · %(n)s caracteres', n='{n}') }}"
+       data-cost-one="{{ _('conta como 1 mensagem') }}"
+       data-cost-many="{{ _('conta como %(n)s mensagens', n='{n}') }}"
+       data-too-long="{{ _('Esse texto passa de 40.000 caracteres. Cole uma parte de cada vez.') }}"
+       data-only-one="{{ _('Só dá para anexar um texto por mensagem. Envie esta antes de colar outro.') }}">
+    <textarea id="anexo" name="anexo" hidden></textarea>
+    <div class="inline-flex max-w-full items-center gap-2 rounded-full bg-cream py-1.5 pl-3 pr-1.5 text-xs font-medium">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>
+      <span data-attachment-label class="min-w-0 truncate"></span>
+      <button type="button" data-attachment-remove aria-label="{{ _('Remover texto colado') }}" title="{{ _('Remover texto colado') }}"
+              class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition hover:bg-moss/40 active:scale-95">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <p data-attachment-error role="alert" class="mt-1 hidden text-xs text-danger"></p>
+  </div>
   <div class="flex items-end gap-2">
     {# Voice mode (M6): shown by voice.js only when the browser supports it (`voice-ok` on <html>). #}
     <button type="button" data-voice-start {% if disabled %}disabled{% endif %}
@@ -108,14 +135,17 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
     </button>
     <label for="texto" class="sr-only">{{ _("Sua resposta") }}</label>
-    <textarea id="texto" name="texto" rows="2" maxlength="4000" {% if disabled %}disabled{% endif %}
+    <textarea id="texto" name="texto" rows="2" maxlength="4000" aria-describedby="texto-counter" {% if disabled %}disabled{% endif %}
               placeholder="{{ _('Escreva sua resposta…') if not disabled else _('Aguarde a resposta…') }}"
               class="min-h-12 flex-1 resize-none rounded-3xl border border-moss bg-surface px-4 py-3 text-sm focus:border-sage-strong focus:outline-none disabled:bg-canvas"></textarea>
-    <button type="button" data-send hx-post="/entrevista/turnos" hx-include="#texto" hx-target="#transcript" hx-swap="beforeend show:bottom"
+    <button type="button" data-send hx-post="/entrevista/turnos" hx-include="#texto, #anexo" hx-target="#transcript" hx-swap="beforeend show:bottom"
             {% if disabled %}disabled{% endif %}
             class="h-12 shrink-0 rounded-full bg-sage px-5 text-sm font-semibold text-ink shadow transition active:scale-95 disabled:opacity-50">{{ _("Enviar") }}</button>
   </div>
-  <div class="mt-2 flex justify-end">
+  <div class="mt-2 flex items-center justify-between gap-3">
+    {# Shown by app.js near the limit, so a typed message is never cut silently (D92). #}
+    <p id="texto-counter" aria-live="polite" class="invisible text-xs text-taupe-strong"
+       data-template="{{ _('%(n)s de %(max)s caracteres', n='{n}', max='4.000') }}"></p>
     <button hx-post="/entrevista/pausar" class="text-xs font-medium text-taupe-strong underline underline-offset-4">{{ _("Chega por agora") }}</button>
   </div>
   {% endif %}

@@ -22,6 +22,9 @@ from mentor.interview.engine import (
     ReplyDone,
     ReplyFailed,
     TurnPendingError,
+    TurnTooLongError,
+    check_turn,
+    turn_cost,
 )
 from mentor.interview.models import Interview, InterviewStatus, InterviewTurn, TurnRole
 from mentor.quotas import service as quotas
@@ -122,20 +125,31 @@ async def interview_page(request: Request, engine: Engine, voz: str | None = Non
 
 @router.post("/turnos", response_class=HTMLResponse)
 async def post_turn(request: Request, engine: Engine) -> Response:
-    text = str((await request.form()).get("texto", "")).strip()
-    if not text:
+    """A typed message, optionally with one long pasted text (`anexo`, D92). An attachment
+    counts as one text message per started 4,000 characters."""
+    form = await request.form()
+    text = str(form.get("texto", "")).strip()
+    attachment = str(form.get("anexo", "")).strip() or None
+    if not text and not attachment:
         return Response(status_code=204)
+    try:
+        check_turn(text, attachment)
+    except TurnTooLongError:
+        return templates.TemplateResponse(
+            request, "interview/_turn_too_long.html", {}, status_code=422
+        )
     interview = await engine.latest()
     if interview is None or interview.status is not InterviewStatus.IN_PROGRESS:
         return redirect(request, "/entrevista")
-    await quotas.check(engine.db, engine.user, QuotaKind.INTERVIEW_TURN)
+    cost = turn_cost(attachment)
+    await quotas.check(engine.db, engine.user, QuotaKind.INTERVIEW_TURN, cost)
     try:
-        turn = await engine.add_user_turn(interview, text)
+        turn = await engine.add_user_turn(interview, text, attachment=attachment)
     except TurnPendingError:
         return templates.TemplateResponse(
             request, "interview/_turn_pending.html", {}, status_code=409
         )
-    await quotas.record(engine.db, engine.user, QuotaKind.INTERVIEW_TURN)
+    await quotas.record(engine.db, engine.user, QuotaKind.INTERVIEW_TURN, cost)
     await engine.db.commit()
     return templates.TemplateResponse(request, "interview/_posted.html", {"turn": turn})
 
