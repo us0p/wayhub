@@ -32,6 +32,8 @@ app = procrastinate.App(
 async def opened(max_size: int = 4) -> AsyncIterator[procrastinate.App]:
     pool = AsyncConnectionPool(
         conninfo=psycopg_dsn(get_settings().database_dsn),
+        # psycopg_pool's default min_size is 4: the prod worker's max_size is 3 (D88).
+        min_size=1,
         max_size=max_size,
         open=False,
         check=AsyncConnectionPool.check_connection,
